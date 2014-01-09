@@ -21,6 +21,7 @@ package org.neo4j.examples.server.plugins;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Relationship;
+import org.neo4j.graphdb.Transaction;
 import org.neo4j.server.plugins.Description;
 import org.neo4j.server.plugins.Name;
 import org.neo4j.server.plugins.PluginTarget;
@@ -37,14 +38,20 @@ public class GetAll extends ServerPlugin
     @PluginTarget( GraphDatabaseService.class )
     public Iterable<Node> getAllNodes( @Source GraphDatabaseService graphDb )
     {
-        return GlobalGraphOperations.at( graphDb ).getAllNodes();
+        try (Transaction tx = graphDb.beginTx())
+        {
+            return GlobalGraphOperations.at( graphDb ).getAllNodes();
+        }
     }
 
     @Description( "Get all relationships from the Neo4j graph database" )
     @PluginTarget( GraphDatabaseService.class )
     public Iterable<Relationship> getAllRelationships( @Source GraphDatabaseService graphDb )
     {
-        return GlobalGraphOperations.at( graphDb ).getAllRelationships();
+        try (Transaction tx = graphDb.beginTx())
+        {
+            return GlobalGraphOperations.at( graphDb ).getAllRelationships();
+        }
     }
 }
-//END SNIPPET: GetAll
+// END SNIPPET: GetAll

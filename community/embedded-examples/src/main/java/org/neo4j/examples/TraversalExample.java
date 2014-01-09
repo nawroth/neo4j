@@ -21,22 +21,36 @@
 package org.neo4j.examples;
 
 import org.neo4j.graphdb.Direction;
+import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Path;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.traversal.Evaluators;
 import org.neo4j.graphdb.traversal.TraversalDescription;
-import org.neo4j.kernel.Traversal;
-import org.neo4j.kernel.Uniqueness;
+import org.neo4j.graphdb.traversal.Uniqueness;
 
 public class TraversalExample
 {
+    private GraphDatabaseService db;
+    private TraversalDescription FRIENDS_TRAVERSAL;
+
+    public TraversalExample( GraphDatabaseService db )
+    {
+        this.db = db;
+        // START SNIPPET: basetraverser
+        FRIENDS_TRAVERSAL = db.traversalDescription()
+                .depthFirst()
+                .relationships( Rels.KNOWS )
+                .uniqueness( Uniqueness.RELATIONSHIP_GLOBAL );
+        // END SNIPPET: basetraverser
+    }
+    
     public String knowsLikesTraverser( Node node )
     {
         String output = "";
         // START SNIPPET: knowslikestraverser
-        for ( Path position : Traversal.description()
+        for ( Path position : db.traversalDescription()
                 .depthFirst()
                 .relationships( Rels.KNOWS )
                 .relationships( Rels.LIKES, Direction.INCOMING )
@@ -48,13 +62,6 @@ public class TraversalExample
         // END SNIPPET: knowslikestraverser
         return output;
     }
-
-    // START SNIPPET: basetraverser
-    final TraversalDescription FRIENDS_TRAVERSAL = Traversal.description()
-            .depthFirst()
-            .relationships( Rels.KNOWS )
-            .uniqueness( Uniqueness.RELATIONSHIP_GLOBAL );
-    // END SNIPPET: basetraverser
 
     public String traverseBaseTraverser( Node node )
     {
