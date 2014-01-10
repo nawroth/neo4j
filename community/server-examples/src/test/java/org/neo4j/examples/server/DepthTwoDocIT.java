@@ -18,13 +18,15 @@
  */
 package org.neo4j.examples.server;
 
-import static org.hamcrest.CoreMatchers.equalTo;
+import static junit.framework.Assert.assertTrue;
 import static org.junit.Assert.assertThat;
 
 import java.util.Map;
 
 import org.junit.Test;
 import org.neo4j.examples.server.plugins.DepthTwo;
+import org.neo4j.examples.server.plugins.GetAll;
+import org.neo4j.graphdb.DynamicLabel;
 
 public class DepthTwoDocIT extends AbstractPluginTestBase
 {
@@ -40,7 +42,9 @@ public class DepthTwoDocIT extends AbstractPluginTestBase
     @Test
     public void testName() throws Exception
     {
-        Map<String, Object> map = getPluginMetadata( DepthTwo.class );
-        assertThat( map.keySet().toString(), equalTo( "" ) );
+        long nodeId = helper.createNode(DynamicLabel.label("test"));
+        Map map = getNodeLevelPluginMetadata(DepthTwo.class, nodeId);
+        assertTrue(map.keySet().size() > 0);
     }
+    
 }

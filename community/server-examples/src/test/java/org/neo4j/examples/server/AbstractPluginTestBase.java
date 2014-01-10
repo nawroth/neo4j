@@ -49,15 +49,26 @@ public class AbstractPluginTestBase extends AbstractRestFunctionalTestBase
     public void checkExtensionMetadata( Class<? extends ServerPlugin> klass, String name, String pattern )
             throws Exception
     {
-        Map<String, Object> map = getPluginMetadata( klass );
+        Map<String, Object> map = getDatabaseLevelPluginMetadata(klass);
 
         assertThat( (String) map.get( name ), RegExp.endsWith( String.format( pattern, klass.getSimpleName(), name ) ) );
     }
 
     @SuppressWarnings( "unchecked" )
-    protected Map<String, Object> getPluginMetadata( Class<? extends ServerPlugin> klass ) throws JsonParseException
+    protected Map<String, Object> getDatabaseLevelPluginMetadata(Class<? extends ServerPlugin> klass) throws JsonParseException
     {
         Map<String, Object> map = PluginFunctionalTestHelper.makeGet( functionalTestHelper.dataUri() );
+        assertThat( "Could not get server metadata.", map, notNullValue() );
+        map = (Map<String, Object>) map.get( "extensions" );
+        assertThat( "Missing extensions key in server metadata.", map, notNullValue() );
+        map = (Map<String, Object>) map.get( klass.getSimpleName() );
+        assertThat( "Missing '" + klass.getSimpleName() + "' key in extensions.", map, notNullValue() );
+        return map;
+    }
+
+    protected Map<String, Object> getNodeLevelPluginMetadata(Class<? extends ServerPlugin> klass, long nodeId) throws JsonParseException
+    {
+        Map<String, Object> map = PluginFunctionalTestHelper.makeGet( functionalTestHelper.nodeUri(nodeId) );
         assertThat( "Could not get server metadata.", map, notNullValue() );
         map = (Map<String, Object>) map.get( "extensions" );
         assertThat( "Missing extensions key in server metadata.", map, notNullValue() );

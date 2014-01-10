@@ -18,6 +18,7 @@
  */
 package org.neo4j.examples.server;
 
+import static junit.framework.Assert.assertTrue;
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.hamcrest.CoreMatchers.notNullValue;
 import static org.junit.Assert.assertThat;
@@ -43,6 +44,13 @@ public class GetAllDocIT extends AbstractPluginTestBase
     }
 
     @Test
+    public void testName() throws Exception
+    {
+        Map<String, Object> map = getDatabaseLevelPluginMetadata(GetAll.class);
+        assertTrue(map.keySet().size() > 0);
+    }
+
+    @Test
     public void canGetExtensionDataForGetAllNodes() throws Exception
     {
         checkExtensionMetadata( GetAll.class, GET_ALL_NODES, "/ext/%s/graphdb/%s" );
@@ -57,7 +65,7 @@ public class GetAllDocIT extends AbstractPluginTestBase
     {
         helper.createNode( DynamicLabel.label( "test" ) );
 
-        String uri = (String) getPluginMetadata( GetAll.class ).get( GET_ALL_NODES );
+        String uri = (String) getDatabaseLevelPluginMetadata(GetAll.class).get( GET_ALL_NODES );
 
         String result = performPost( uri );
         List<Map<String, Object>> list = JsonHelper.jsonToList( result );
@@ -82,7 +90,7 @@ public class GetAllDocIT extends AbstractPluginTestBase
     {
         helper.createRelationship( "test" );
 
-        String uri = (String) getPluginMetadata( GetAll.class ).get( GET_ALL_RELATIONSHIPS );
+        String uri = (String) getDatabaseLevelPluginMetadata(GetAll.class).get( GET_ALL_RELATIONSHIPS );
 
         String result = performPost( uri );
         List<Map<String, Object>> list = JsonHelper.jsonToList( result );
