@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,34 +19,44 @@
  */
 package org.neo4j.ha;
 
-import static java.lang.System.currentTimeMillis;
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
-import static org.neo4j.test.ha.ClusterManager.clusterOfSize;
-import static org.neo4j.test.ha.ClusterManager.masterAvailable;
-import static org.neo4j.test.ha.ClusterManager.masterSeesSlavesAsAvailable;
-
 import java.io.File;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
 import org.junit.After;
-import org.junit.Ignore;
 import org.junit.Test;
+
 import org.neo4j.cluster.ClusterSettings;
+import org.neo4j.cluster.InstanceId;
+import org.neo4j.cluster.client.ClusterClient;
+import org.neo4j.cluster.protocol.cluster.ClusterListener;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
+import org.neo4j.graphdb.NotFoundException;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.factory.HighlyAvailableGraphDatabaseFactory;
 import org.neo4j.helpers.collection.MapUtil;
+import org.neo4j.kernel.GraphDatabaseAPI;
 import org.neo4j.kernel.ha.HaSettings;
 import org.neo4j.kernel.ha.HighlyAvailableGraphDatabase;
+import org.neo4j.kernel.impl.util.StringLogger;
 import org.neo4j.shell.ShellClient;
 import org.neo4j.shell.ShellException;
 import org.neo4j.shell.ShellLobby;
 import org.neo4j.shell.ShellSettings;
 import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.ha.ClusterManager;
+
+import static java.lang.System.currentTimeMillis;
+
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
+
+import static org.neo4j.test.ha.ClusterManager.clusterOfSize;
+import static org.neo4j.test.ha.ClusterManager.masterAvailable;
+import static org.neo4j.test.ha.ClusterManager.masterSeesSlavesAsAvailable;
 
 public class TestPullUpdates
 {
@@ -64,7 +74,6 @@ public class TestPullUpdates
     }
 
     @Test
-    @Ignore("Breaks more often than it passes - must wait for a fix")
     public void makeSureUpdatePullerGetsGoingAfterMasterSwitch() throws Throwable
     {
         File root = TargetDirectory.forTest( getClass() ).directory( "makeSureUpdatePullerGetsGoingAfterMasterSwitch", true );
@@ -73,21 +82,23 @@ public class TestPullUpdates
         clusterManager.start();
         cluster = clusterManager.getDefaultCluster();
 
+        long commonNodeId = createNodeOnMaster();
+
         HighlyAvailableGraphDatabase master = cluster.getMaster();
-        setProperty( master, 1 );
-        awaitPropagation( 1, cluster );
+        setProperty( master, commonNodeId, 1 );
+        awaitPropagation( 1, commonNodeId, cluster );
         cluster.await( masterSeesSlavesAsAvailable( 2 ) );
         ClusterManager.RepairKit masterShutdownRK = cluster.shutdown( master );
         cluster.await( masterAvailable() );
         cluster.await( masterSeesSlavesAsAvailable( 1 ) );
-        setProperty( cluster.getMaster(), 2 );
+        setProperty( cluster.getMaster(), commonNodeId, 2 );
 
         masterShutdownRK.repair();
         cluster.await( masterAvailable() );
 
         cluster.await( masterSeesSlavesAsAvailable( 2 ) );
 
-        awaitPropagation( 2, cluster );
+        awaitPropagation( 2, commonNodeId, cluster );
     }
 
     @Test
@@ -109,18 +120,31 @@ public class TestPullUpdates
         clusterManager.start();
         cluster = clusterManager.getDefaultCluster();
 
-        setProperty( cluster.getMaster(), 1 );
+        long commonNodeId = createNodeOnMaster();
+
+        setProperty( cluster.getMaster(), commonNodeId, 1 );
         callPullUpdatesViaShell( 2 );
         HighlyAvailableGraphDatabase slave = cluster.getAnySlave();
         Transaction transaction = slave.beginTx();
         try
         {
-            assertEquals( 1, slave.getReferenceNode().getProperty( "i" ) );
+            assertEquals( 1, slave.getNodeById(commonNodeId).getProperty( "i" ) );
         }
         finally
         {
             transaction.finish();
         }
+    }
+
+    private long createNodeOnMaster()
+    {
+        long commonNodeId;
+        try( Transaction tx=cluster.getMaster().beginTx() )
+        {
+            commonNodeId = cluster.getMaster().createNode().getId();
+            tx.success();
+        }
+        return commonNodeId;
     }
 
     @Test
@@ -144,15 +168,41 @@ public class TestPullUpdates
                     .setConfig( ClusterSettings.server_id, "2" )
                     .setConfig( ClusterSettings.initial_hosts, ":5001" )
                     .newGraphDatabase();
+
+            // Required to block until the slave has left for sure
+            final CountDownLatch slaveLeftLatch = new CountDownLatch( 1 );
+
+            final ClusterClient masterClusterClient = ( (HighlyAvailableGraphDatabase) master ).getDependencyResolver()
+                    .resolveDependency( ClusterClient.class );
+
+            masterClusterClient.addClusterListener( new ClusterListener.Adapter()
+            {
+                @Override
+                public void leftCluster( InstanceId instanceId )
+                {
+                    slaveLeftLatch.countDown();
+                    masterClusterClient.removeClusterListener( this );
+                }
+            } );
+
+            System.out.println("MASTER:"+master.isAvailable( 60 ));
+            System.out.println("SLAVE:"+slave.isAvailable( 60 ));
+
+            ((GraphDatabaseAPI)master).getDependencyResolver().resolveDependency( StringLogger.class ).info( "SHUTTING DOWN SLAVE" );
             slave.shutdown();
 
-            long nodeId = -1;
-            Transaction tx = master.beginTx();
-            Node node = master.createNode();
-            node.setProperty( "from", "master" );
-            nodeId = node.getId();
-            tx.success();
-            tx.finish();
+            // Make sure that the slave has left, because shutdown() may return before the master knows
+            if (!slaveLeftLatch.await(60, TimeUnit.SECONDS))
+                throw new IllegalStateException( "Timeout waiting for slave to leave" );
+
+            long nodeId;
+            try ( Transaction tx = master.beginTx() )
+            {
+                Node node = master.createNode();
+                node.setProperty( "from", "master" );
+                nodeId = node.getId();
+                tx.success();
+            }
 
             // Store is already in place, should pull updates
             slave = new HighlyAvailableGraphDatabaseFactory().
@@ -162,14 +212,12 @@ public class TestPullUpdates
                     .setConfig( HaSettings.pull_interval, "0" ) // no pull updates, should pull on startup
                     .newGraphDatabase();
 
-            Transaction transaction = slave.beginTx();
-            try
+            slave.beginTx().close(); // Make sure switch to slave completes and so does the update pulling on startup
+
+            try ( Transaction tx = slave.beginTx() )
             {
                 assertEquals( "master", slave.getNodeById( nodeId ).getProperty( "from" ) );
-            }
-            finally
-            {
-                transaction.finish();
+                tx.success();
             }
         }
         finally
@@ -196,7 +244,7 @@ public class TestPullUpdates
         Thread.sleep( 50 );
     }
 
-    private void awaitPropagation( int i, ClusterManager.ManagedCluster cluster ) throws Exception
+    private void awaitPropagation( int i, long nodeId, ClusterManager.ManagedCluster cluster ) throws Exception
     {
         long endTime = currentTimeMillis() + PULL_INTERVAL * 20;
         boolean ok = false;
@@ -205,10 +253,18 @@ public class TestPullUpdates
             ok = true;
             for ( HighlyAvailableGraphDatabase db : cluster.getAllMembers() )
             {
-                Object value = db.getReferenceNode().getProperty( "i", null );
-                if ( value == null || (Integer) value != i )
+                try ( Transaction tx = db.beginTx() )
                 {
-                    ok = false;
+
+                    Number value = (Number)db.getNodeById(nodeId).getProperty( "i", null );
+                    if ( value == null || value.intValue() != i )
+                    {
+                        ok = false;
+                    }
+                }
+                catch( NotFoundException e )
+                {
+                    ok=false;
                 }
             }
             if ( !ok )
@@ -219,12 +275,12 @@ public class TestPullUpdates
         assertTrue( "Change wasn't propagated by pulling updates", ok );
     }
 
-    private void setProperty( HighlyAvailableGraphDatabase db, int i ) throws Exception
+    private void setProperty( HighlyAvailableGraphDatabase db, long nodeId, int i ) throws Exception
     {
         Transaction tx = db.beginTx();
         try
         {
-            db.getReferenceNode().setProperty( "i", i );
+            db.getNodeById( nodeId ).setProperty( "i", i );
             tx.success();
         }
         finally

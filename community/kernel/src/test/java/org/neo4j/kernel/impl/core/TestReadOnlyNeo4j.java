@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -39,6 +39,7 @@ import org.neo4j.test.TestGraphDatabaseFactory;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
+
 import static org.neo4j.graphdb.DynamicRelationshipType.withName;
 import static org.neo4j.graphdb.Neo4jMatchers.hasProperty;
 import static org.neo4j.graphdb.Neo4jMatchers.inTx;
@@ -46,8 +47,8 @@ import static org.neo4j.graphdb.Neo4jMatchers.inTx;
 public class TestReadOnlyNeo4j
 {
     private static final String PATH = "read-only";
-    @Rule public EphemeralFileSystemRule fs = new EphemeralFileSystemRule();
-    
+    public final @Rule EphemeralFileSystemRule fs = new EphemeralFileSystemRule();
+
     @Test
     public void testSimple()
     {
@@ -62,6 +63,18 @@ public class TestReadOnlyNeo4j
         try
         {
             readGraphDb.createNode();
+
+            fail( "expected exception" );
+        }
+        catch ( ReadOnlyDbException e )
+        {
+            // good
+        }
+        try
+        {
+            readGraphDb.createNode();
+
+            fail( "expected exception" );
         }
         catch ( ReadOnlyDbException e )
         {
@@ -77,7 +90,7 @@ public class TestReadOnlyNeo4j
         GraphDatabaseService db = new TestGraphDatabaseFactory().setFileSystem( fs.get() ).newImpermanentDatabase( PATH );
         Transaction tx = db.beginTx();
         @SuppressWarnings("deprecation")
-        Node prevNode = db.getReferenceNode();
+        Node prevNode = db.createNode();
         for ( int i = 0; i < 100; i++ )
         {
             Node node = db.createNode();
@@ -143,13 +156,13 @@ public class TestReadOnlyNeo4j
         }
         
         // clear caches and try reads
-        ((GraphDatabaseAPI)db).getNodeManager().clearCache();
+        nodeManager( db ).clearCache();
 
         Transaction transaction = db.beginTx();
         assertEquals( node1, db.getNodeById( node1.getId() ) );
         assertEquals( node2, db.getNodeById( node2.getId() ) );
         assertEquals( rel, db.getRelationshipById( rel.getId() ) );
-        ((GraphDatabaseAPI)db).getNodeManager().clearCache();
+        nodeManager( db ).clearCache();
         
         assertThat( node1, inTx( db, hasProperty( "key1" ).withValue( "value1" ) ) );
         Relationship loadedRel = node1.getSingleRelationship(
@@ -158,5 +171,10 @@ public class TestReadOnlyNeo4j
         assertThat(loadedRel, inTx(db, hasProperty( "key1" ).withValue( "value1" )));
         transaction.finish();
         db.shutdown();
+    }
+
+    private NodeManager nodeManager( GraphDatabaseService db )
+    {
+        return ((GraphDatabaseAPI)db).getDependencyResolver().resolveDependency( NodeManager.class );
     }
 }

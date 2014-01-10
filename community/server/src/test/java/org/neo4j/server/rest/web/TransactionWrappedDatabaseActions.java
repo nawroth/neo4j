@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -80,7 +80,9 @@ public class TransactionWrappedDatabaseActions extends DatabaseActions
 
         try
         {
-            return super.getNode( nodeId );
+            NodeRepresentation node = super.getNode( nodeId );
+            transaction.success();
+            return node;
         }
         finally
         {
@@ -97,21 +99,6 @@ public class TransactionWrappedDatabaseActions extends DatabaseActions
         {
             super.deleteNode( nodeId );
             transaction.success();
-        }
-        finally
-        {
-            transaction.finish();
-        }
-    }
-
-    @Override
-    public NodeRepresentation getReferenceNode()
-    {
-        Transaction transaction = graph.beginTx();
-
-        try
-        {
-            return super.getReferenceNode();
         }
         finally
         {
@@ -261,7 +248,9 @@ public class TransactionWrappedDatabaseActions extends DatabaseActions
 
         try
         {
-            return super.getRelationship( relationshipId );
+            RelationshipRepresentation relationship = super.getRelationship( relationshipId );
+            transaction.success();
+            return relationship;
         }
         finally
         {
@@ -293,7 +282,9 @@ public class TransactionWrappedDatabaseActions extends DatabaseActions
 
         try
         {
-            return super.getNodeRelationships( nodeId, direction, types );
+            ListRepresentation nodeRelationships = super.getNodeRelationships( nodeId, direction, types );
+            transaction.success();
+            return nodeRelationships;
         }
         finally
         {
@@ -442,7 +433,9 @@ public class TransactionWrappedDatabaseActions extends DatabaseActions
 
         try
         {
-            return super.findSinglePath( startId, endId, map );
+            PathRepresentation singlePath = super.findSinglePath( startId, endId, map );
+            transaction.success();
+            return singlePath;
         }
         finally
         {
@@ -456,7 +449,9 @@ public class TransactionWrappedDatabaseActions extends DatabaseActions
         Transaction transaction = graph.beginTx();
         try
         {
-            return super.getNodesWithLabel( labelName, properties );
+            ListRepresentation nodesWithLabel = super.getNodesWithLabel( labelName, properties );
+            transaction.success();
+            return nodesWithLabel;
         }
         finally
         {

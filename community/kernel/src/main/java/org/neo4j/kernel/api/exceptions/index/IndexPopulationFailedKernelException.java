@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -20,19 +20,22 @@
 package org.neo4j.kernel.api.exceptions.index;
 
 import org.neo4j.kernel.api.exceptions.KernelException;
-import org.neo4j.kernel.impl.api.index.IndexDescriptor;
+import org.neo4j.kernel.api.index.IndexDescriptor;
 
 public class IndexPopulationFailedKernelException extends KernelException
 {
-    private static final String FORMAT_MESSAGE = "Failed to populate index for labelId %d on propertyKeyId %d";
+    private static final String FORMAT_MESSAGE = "Failed to populate index for %s [labelId: %d, propertyKeyId %d]";
 
-    public IndexPopulationFailedKernelException( IndexDescriptor descriptor, Throwable cause )
+    public IndexPopulationFailedKernelException( IndexDescriptor descriptor, String indexUserDescription,
+                                                 Throwable cause )
     {
-        super( cause, FORMAT_MESSAGE, descriptor.getLabelId(), descriptor.getPropertyKeyId() );
+        super( cause, FORMAT_MESSAGE, indexUserDescription, descriptor.getLabelId(), descriptor.getPropertyKeyId() );
     }
 
-    public IndexPopulationFailedKernelException( IndexDescriptor descriptor, String message )
+    public IndexPopulationFailedKernelException( IndexDescriptor descriptor, String indexUserDescription,
+                                                 String message )
     {
-        super( FORMAT_MESSAGE + ", due to " + message, descriptor.getLabelId(), descriptor.getPropertyKeyId() );
+        super( FORMAT_MESSAGE + ", due to " + message,
+               indexUserDescription, descriptor.getLabelId(), descriptor.getPropertyKeyId() );
     }
 }

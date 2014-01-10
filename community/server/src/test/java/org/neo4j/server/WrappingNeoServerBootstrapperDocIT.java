@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -23,12 +23,12 @@ import java.io.IOException;
 import java.net.InetAddress;
 import java.net.UnknownHostException;
 
-import com.sun.jersey.api.client.ClientHandlerException;
-import com.sun.jersey.api.client.ClientResponse.Status;
 import org.junit.AfterClass;
 import org.junit.BeforeClass;
 import org.junit.Rule;
 import org.junit.Test;
+
+import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.Settings;
 import org.neo4j.jmx.Primitives;
@@ -46,7 +46,11 @@ import org.neo4j.test.TestData;
 import org.neo4j.test.TestGraphDatabaseFactory;
 import org.neo4j.test.server.ExclusiveServerTestBase;
 
+import com.sun.jersey.api.client.ClientHandlerException;
+import com.sun.jersey.api.client.ClientResponse.Status;
+
 import static java.lang.String.format;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -113,7 +117,7 @@ public class WrappingNeoServerBootstrapperDocIT extends ExclusiveServerTestBase
                 "{\"command\" : \"ls\",\"engine\":\"shell\"}" ).expectedStatus(
                 Status.OK.getStatusCode() ).post(
                 "http://127.0.0.1:7575/db/manage/server/console/" ).entity();
-        assertTrue( response.contains( "neo4j-sh (0)$" ) );
+        assertTrue( response.contains( "neo4j-sh (?)$" ) );
         srv.stop();
     }
 
@@ -127,7 +131,7 @@ public class WrappingNeoServerBootstrapperDocIT extends ExclusiveServerTestBase
                 "{\"command\" : \"ls\",\"engine\":\"shell\"}" ).expectedStatus(
                 Status.OK.getStatusCode() ).post(
                 "http://127.0.0.1:7474/db/manage/server/console/" ).entity();
-        assertTrue( response.contains( "neo4j-sh (0)$" ) );
+        assertTrue( response.contains( "neo4j-sh (?)$" ) );
         srv.stop();
     }
 
@@ -165,8 +169,7 @@ public class WrappingNeoServerBootstrapperDocIT extends ExclusiveServerTestBase
     @Test
     public void shouldResponseAndBeAbleToModifyDb()
     {
-        WrappingNeoServerBootstrapper srv = new WrappingNeoServerBootstrapper(
-                myDb );
+        WrappingNeoServerBootstrapper srv = new WrappingNeoServerBootstrapper( myDb );
         srv.start();
 
         long originalNodeNumber = myDb.getDependencyResolver().resolveDependency( JmxKernelExtension.class )
@@ -188,7 +191,9 @@ public class WrappingNeoServerBootstrapperDocIT extends ExclusiveServerTestBase
         srv.stop();
 
         // Should be able to still talk to the db
-        myDb.beginTx();
-        assertTrue( myDb.getReferenceNode() != null );
+        try ( Transaction tx = myDb.beginTx() )
+        {
+            assertTrue( myDb.createNode() != null );
+        }
     }
 }

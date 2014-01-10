@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,20 +19,14 @@
  */
 package org.neo4j.kernel.impl.api.index;
 
-import java.util.Iterator;
-
-import org.neo4j.helpers.Pair;
 import org.neo4j.helpers.collection.Visitor;
+import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.NodePropertyUpdate;
+import org.neo4j.kernel.api.labelscan.NodeLabelUpdate;
 
 /** The indexing services view of the universe. */
 public interface IndexStoreView
 {
-    /**
-     * Get properties of a node, if those properties exist.
-     */
-    Iterator<Pair<Integer, Object>> getNodeProperties( long nodeId, Iterator<Long> propertyKeys );
-
     /**
      * Retrieve all nodes in the database with a given label and property, as pairs of node id and property value.
      *
@@ -47,6 +41,9 @@ public interface IndexStoreView
      *
      * @return a {@link StoreScan} to start and to stop the scan.
      */
-    <FAILURE extends Exception> StoreScan<FAILURE> visitNodes( long[] labelIds, long[] propertyKeyIds,
-                                                               Visitor<NodePropertyUpdate, FAILURE> visitor );
+    <FAILURE extends Exception> StoreScan<FAILURE> visitNodes( int[] labelIds, int[] propertyKeyIds,
+            Visitor<NodePropertyUpdate, FAILURE> propertyUpdateVisitor,
+            Visitor<NodeLabelUpdate, FAILURE> labelUpdateVisitor );
+
+    Iterable<NodePropertyUpdate> nodeAsUpdates( long nodeId );
 }

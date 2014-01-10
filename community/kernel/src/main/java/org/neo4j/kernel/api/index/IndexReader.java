@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,7 +21,7 @@ package org.neo4j.kernel.api.index;
 
 import java.io.Closeable;
 
-import org.neo4j.kernel.impl.api.PrimitiveLongIterator;
+import org.neo4j.kernel.impl.util.PrimitiveLongIterator;
 
 import static org.neo4j.helpers.collection.IteratorUtil.emptyPrimitiveLongIterator;
 
@@ -37,7 +37,7 @@ public interface IndexReader extends Closeable
     @Override
     void close();
     
-    class Empty implements IndexReader
+    IndexReader EMPTY = new IndexReader()
     {
         @Override
         public PrimitiveLongIterator lookup( Object value )
@@ -49,5 +49,5 @@ public interface IndexReader extends Closeable
         public void close()
         {
         }
-    }
+    };
 }

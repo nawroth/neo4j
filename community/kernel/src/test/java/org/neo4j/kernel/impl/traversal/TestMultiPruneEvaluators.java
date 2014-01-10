@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -41,7 +41,7 @@ import static org.neo4j.graphdb.traversal.Evaluators.toDepth;
 import static org.neo4j.helpers.collection.IteratorUtil.count;
 import static org.neo4j.kernel.Traversal.traversal;
 
-public class TestMultiPruneEvaluators extends AbstractTestBase
+public class TestMultiPruneEvaluators extends TraversalTestBase
 {
     @Before
     public void setupGraph()

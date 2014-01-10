@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -38,7 +38,7 @@ import static org.neo4j.kernel.Traversal.initialState;
 import static org.neo4j.kernel.Traversal.traversal;
 import static org.neo4j.kernel.Uniqueness.NODE_PATH;
 
-public class TestBranchState extends AbstractTestBase
+public class TestBranchState extends TraversalTestBase
 {
     @Test
     public void depthAsState() throws Exception

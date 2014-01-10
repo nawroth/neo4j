@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -35,7 +35,7 @@ import static org.neo4j.graphdb.traversal.Evaluators.lastRelationshipTypeIs;
 import static org.neo4j.kernel.Traversal.description;
 import static org.neo4j.kernel.Traversal.traversal;
 
-public class TestEvaluators extends AbstractTestBase
+public class TestEvaluators extends TraversalTestBase
 {
     private static enum Types implements RelationshipType
     {

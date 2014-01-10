@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,11 +19,12 @@
  */
 package org.neo4j.kernel.impl.transaction.xaframework;
 
-import org.neo4j.graphdb.TransactionFailureException;
-import org.neo4j.kernel.impl.core.TransactionState;
+import java.io.IOException;
 
 import javax.transaction.xa.XAException;
-import java.io.IOException;
+
+import org.neo4j.graphdb.TransactionFailureException;
+import org.neo4j.kernel.impl.core.TransactionState;
 
 /**
  * <CODE>XaTransaction</CODE> holds all the commands that participate in the

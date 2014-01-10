@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -32,7 +32,7 @@ import org.neo4j.kernel.IdGeneratorFactory;
 import org.neo4j.kernel.IdType;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.nioneo.store.windowpool.WindowPoolFactory;
-import org.neo4j.kernel.impl.transaction.TxHook;
+import org.neo4j.kernel.impl.transaction.RemoteTxHook;
 import org.neo4j.kernel.impl.util.Bits;
 import org.neo4j.kernel.impl.util.StringLogger;
 
@@ -55,11 +55,21 @@ public class NeoStore extends AbstractStore
     public static final String TYPE_DESCRIPTOR = "NeoStore";
 
     /*
-     *  6 longs in header (long + in use), time | random | version | txid | store version | graph next prop
+     *  7 longs in header (long + in use), time | random | version | txid | store version | graph next prop | latest constraint tx
      */
     public static final int RECORD_SIZE = 9;
 
     public static final String DEFAULT_NAME = "neostore";
+
+    // Positions of meta-data records
+
+    private static final int TIME_POSITION = 0;
+    private static final int RANDOM_POSITION = 1;
+    private static final int VERSION_POSITION = 2;
+    private static final int LATEST_TX_POSITION = 3;
+    private static final int STORE_VERSION_POSITION = 4;
+    private static final int NEXT_GRAPH_PROP_POSITION = 5;
+    private static final int LATEST_CONSTRAINT_TX_POSITION = 6;
 
     public static boolean isStorePresent( FileSystemAbstraction fs, Config config )
     {
@@ -73,15 +83,16 @@ public class NeoStore extends AbstractStore
     private RelationshipTypeTokenStore relTypeStore;
     private LabelTokenStore labelTokenStore;
     private SchemaStore schemaStore;
-    private final TxHook txHook;
+    private final RemoteTxHook txHook;
     private long lastCommittedTx = -1;
+    private long latestConstraintIntroducingTx = -1;
 
     private final int REL_GRAB_SIZE;
 
     public NeoStore( File fileName, Config conf,
                      IdGeneratorFactory idGeneratorFactory, WindowPoolFactory windowPoolFactory,
                      FileSystemAbstraction fileSystemAbstraction,
-                     StringLogger stringLogger, TxHook txHook,
+                     StringLogger stringLogger, RemoteTxHook txHook,
                      RelationshipTypeTokenStore relTypeStore, LabelTokenStore labelTokenStore,
                      PropertyStore propStore, RelationshipStore relStore,
                      NodeStore nodeStore, SchemaStore schemaStore )
@@ -176,8 +187,16 @@ public class NeoStore extends AbstractStore
          */
         if ( getFileChannel().size() == RECORD_SIZE*5 )
         {
-            insertRecord( 5, -1 );
-            registerIdFromUpdateRecord( 5 );
+            insertRecord( NEXT_GRAPH_PROP_POSITION, -1 );
+            registerIdFromUpdateRecord( NEXT_GRAPH_PROP_POSITION );
+        }
+
+        /* Silent upgrade for latest constraint introducing tx
+         */
+        if ( getFileChannel().size() == RECORD_SIZE*6 )
+        {
+            insertRecord( LATEST_CONSTRAINT_TX_POSITION, 0 );
+            registerIdFromUpdateRecord( LATEST_CONSTRAINT_TX_POSITION );
         }
     }
 
@@ -454,6 +473,21 @@ public class NeoStore extends AbstractStore
             lastCommittedTx = getRecord( 3 );
         }
         return lastCommittedTx;
+    }
+
+    public long getLatestConstraintIntroducingTx()
+    {
+        if(latestConstraintIntroducingTx == -1)
+        {
+            latestConstraintIntroducingTx = getRecord( LATEST_CONSTRAINT_TX_POSITION );
+        }
+        return latestConstraintIntroducingTx;
+    }
+
+    public void setLatestConstraintIntroducingTx( long latestConstraintIntroducingTx )
+    {
+        setRecord( LATEST_CONSTRAINT_TX_POSITION, latestConstraintIntroducingTx );
+        this.latestConstraintIntroducingTx = latestConstraintIntroducingTx;
     }
 
     public long incrementVersion()

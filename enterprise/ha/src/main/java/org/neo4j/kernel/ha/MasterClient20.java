@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,15 +19,12 @@
  */
 package org.neo4j.kernel.ha;
 
-import static org.neo4j.com.Protocol.EMPTY_SERIALIZER;
-import static org.neo4j.com.Protocol.VOID_DESERIALIZER;
-import static org.neo4j.com.Protocol.writeString;
-
 import java.io.IOException;
 import java.net.URI;
 import java.nio.ByteBuffer;
 
 import org.jboss.netty.buffer.ChannelBuffer;
+
 import org.neo4j.com.BlockLogBuffer;
 import org.neo4j.com.Client;
 import org.neo4j.com.Deserializer;
@@ -38,22 +35,25 @@ import org.neo4j.com.ResourceReleaser;
 import org.neo4j.com.Response;
 import org.neo4j.com.Serializer;
 import org.neo4j.com.StoreWriter;
-import org.neo4j.com.TargetCaller;
 import org.neo4j.com.TransactionStream;
 import org.neo4j.com.TxExtractor;
-import org.neo4j.helpers.Pair;
 import org.neo4j.kernel.IdType;
 import org.neo4j.kernel.configuration.Config;
+import org.neo4j.kernel.ha.com.master.HandshakeResult;
 import org.neo4j.kernel.ha.com.master.Master;
 import org.neo4j.kernel.ha.com.master.MasterImpl;
 import org.neo4j.kernel.ha.com.master.MasterServer;
 import org.neo4j.kernel.ha.com.slave.MasterClient;
 import org.neo4j.kernel.ha.id.IdAllocation;
 import org.neo4j.kernel.ha.lock.LockResult;
-import org.neo4j.kernel.ha.transaction.UnableToResumeTransactionException;
 import org.neo4j.kernel.impl.nioneo.store.IdRange;
 import org.neo4j.kernel.impl.nioneo.store.StoreId;
+import org.neo4j.kernel.impl.transaction.TransactionAlreadyActiveException;
 import org.neo4j.kernel.logging.Logging;
+
+import static org.neo4j.com.Protocol.EMPTY_SERIALIZER;
+import static org.neo4j.com.Protocol.VOID_DESERIALIZER;
+import static org.neo4j.com.Protocol.writeString;
 
 /**
  * The {@link Master} a slave should use to communicate with its master. It
@@ -111,9 +111,9 @@ public class MasterClient20 extends Client<Master> implements MasterClient
     }
 
     @Override
-    public Response<IdAllocation> allocateIds( final IdType idType )
+    public Response<IdAllocation> allocateIds( RequestContext context, final IdType idType )
     {
-        return sendRequest( HaRequestType20.ALLOCATE_IDS, RequestContext.EMPTY, new Serializer()
+        return sendRequest( HaRequestType20.ALLOCATE_IDS, context, new Serializer()
                 {
                     @Override
                     public void write( ChannelBuffer buffer, ByteBuffer readBuffer ) throws IOException
@@ -123,7 +123,7 @@ public class MasterClient20 extends Client<Master> implements MasterClient
                 }, new Deserializer<IdAllocation>()
                 {
                     @Override
-                    public IdAllocation read( ChannelBuffer buffer, ByteBuffer temporaryBuffer ) throws IOException
+                    public IdAllocation read( ChannelBuffer buffer, ByteBuffer temporaryBuffer )
                     {
                         return readIdAllocation( buffer );
                     }
@@ -271,7 +271,16 @@ public class MasterClient20 extends Client<Master> implements MasterClient
         return sendRequest( HaRequestType20.ACQUIRE_SCHEMA_WRITE_LOCK, context,
                 EMPTY_SERIALIZER, LOCK_RESULT_DESERIALIZER );
     }
-    
+
+    @Override
+    public Response<LockResult> acquireIndexEntryWriteLock( RequestContext context, long labelId, long propertyKeyId,
+                                                            String propertyValue )
+    {
+        return sendRequest( HaRequestType20.ACQUIRE_INDEX_ENTRY_WRITE_LOCK, context,
+                            new AcquireIndexEntryLockSerializer( labelId, propertyKeyId, propertyValue ),
+                            LOCK_RESULT_DESERIALIZER );
+    }
+
     @Override
     public Response<Long> commitSingleResourceTransaction( RequestContext context,
                                                            final String resource, final TxExtractor txGetter )
@@ -312,7 +321,7 @@ public class MasterClient20 extends Client<Master> implements MasterClient
                 }
             }, VOID_DESERIALIZER );
         }
-        catch ( UnableToResumeTransactionException e )
+        catch ( TransactionAlreadyActiveException e )
         {
             if ( !success )
             {
@@ -326,7 +335,7 @@ public class MasterClient20 extends Client<Master> implements MasterClient
                  * This is effectively the use case of awaiting a lock that isn't granted
                  * within the lock read timeout period.
                  */
-                return new Response<Void>( null, getStoreId(), TransactionStream.EMPTY, ResourceReleaser.NO_OP );
+                return new Response<>( null, getStoreId(), TransactionStream.EMPTY, ResourceReleaser.NO_OP );
             }
             throw e;
         }
@@ -345,22 +354,22 @@ public class MasterClient20 extends Client<Master> implements MasterClient
     }
 
     @Override
-    public Response<Pair<Integer, Long>> getMasterIdForCommittedTx( final long txId, StoreId storeId )
+    public Response<HandshakeResult> handshake( final long txId, StoreId storeId )
     {
-        return sendRequest( HaRequestType20.GET_MASTER_ID_FOR_TX, RequestContext.EMPTY, new Serializer()
+        return sendRequest( HaRequestType20.HANDSHAKE, RequestContext.EMPTY, new Serializer()
                 {
                     @Override
                     public void write( ChannelBuffer buffer, ByteBuffer readBuffer ) throws IOException
                     {
                         buffer.writeLong( txId );
                     }
-                }, new Deserializer<Pair<Integer, Long>>()
+                }, new Deserializer<HandshakeResult>()
                 {
                     @Override
-                    public Pair<Integer, Long> read( ChannelBuffer buffer, ByteBuffer temporaryBuffer ) throws
+                    public HandshakeResult read( ChannelBuffer buffer, ByteBuffer temporaryBuffer ) throws
                             IOException
                     {
-                        return Pair.of( buffer.readInt(), buffer.readLong() );
+                        return new HandshakeResult( buffer.readInt(), buffer.readLong(), -1 );
                     }
                 }, storeId
         );
@@ -376,7 +385,7 @@ public class MasterClient20 extends Client<Master> implements MasterClient
 
     private RequestContext stripFromTransactions( RequestContext context )
     {
-        return new RequestContext( context.getSessionId(), context.machineId(), context.getEventIdentifier(),
+        return new RequestContext( context.getEpoch(), context.machineId(), context.getEventIdentifier(),
                 new RequestContext.Tx[0], context.getMasterId(), context.getChecksum() );
     }
 
@@ -468,20 +477,25 @@ public class MasterClient20 extends Client<Master> implements MasterClient
         }
     }
 
-    static abstract class AquireLockCall implements TargetCaller<Master, LockResult>
+    protected static class AcquireIndexEntryLockSerializer implements Serializer
     {
-        @Override
-        public Response<LockResult> call( Master master, RequestContext context,
-                                          ChannelBuffer input, ChannelBuffer target )
+        private final long labelId;
+        private final long propertyKeyId;
+        private final String value;
+
+        AcquireIndexEntryLockSerializer( long labelId, long propertyKeyId, String value )
         {
-            long[] ids = new long[input.readInt()];
-            for ( int i = 0; i < ids.length; i++ )
-            {
-                ids[i] = input.readLong();
-            }
-            return lock( master, context, ids );
+            this.labelId = labelId;
+            this.propertyKeyId = propertyKeyId;
+            this.value = value;
         }
 
-        abstract Response<LockResult> lock( Master master, RequestContext context, long... ids );
+        @Override
+        public void write( ChannelBuffer buffer, ByteBuffer readBuffer ) throws IOException
+        {
+            buffer.writeLong( labelId );
+            buffer.writeLong( propertyKeyId );
+            writeString( buffer, value );
+        }
     }
 }

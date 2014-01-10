@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,15 +19,20 @@
  */
 package org.neo4j.kernel.impl.api.index;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.Future;
 
+import org.neo4j.graphdb.ResourceIterator;
+import org.neo4j.kernel.api.exceptions.index.IndexActivationFailedKernelException;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
+import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.IndexReader;
+import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.api.index.InternalIndexState;
-import org.neo4j.kernel.api.index.NodePropertyUpdate;
 import org.neo4j.kernel.api.index.SchemaIndexProvider;
+import org.neo4j.kernel.api.exceptions.schema.ConstraintVerificationFailedKernelException;
 
 public abstract class AbstractDelegatingIndexProxy implements IndexProxy
 {
@@ -38,17 +43,11 @@ public abstract class AbstractDelegatingIndexProxy implements IndexProxy
     {
         getDelegate().start();
     }
-    
+
     @Override
-    public void update( Iterable<NodePropertyUpdate> updates ) throws IOException
+    public IndexUpdater newUpdater( IndexUpdateMode mode )
     {
-        getDelegate().update( updates );
-    }
-    
-    @Override
-    public void recover( Iterable<NodePropertyUpdate> updates ) throws IOException
-    {
-        getDelegate().recover( updates );
+        return getDelegate().newUpdater( mode );
     }
 
     @Override
@@ -100,13 +99,13 @@ public abstract class AbstractDelegatingIndexProxy implements IndexProxy
     }
 
     @Override
-    public void activate()
+    public void activate() throws IndexActivationFailedKernelException
     {
         getDelegate().activate();
     }
 
     @Override
-    public void validate() throws IndexPopulationFailedKernelException
+    public void validate() throws ConstraintVerificationFailedKernelException, IndexPopulationFailedKernelException
     {
         getDelegate().validate();
     }
@@ -121,5 +120,11 @@ public abstract class AbstractDelegatingIndexProxy implements IndexProxy
     public String toString()
     {
         return String.format( "%s -> %s", getClass().getSimpleName(), getDelegate().toString() );
+    }
+
+    @Override
+    public ResourceIterator<File> snapshotFiles() throws IOException
+    {
+        return getDelegate().snapshotFiles();
     }
 }

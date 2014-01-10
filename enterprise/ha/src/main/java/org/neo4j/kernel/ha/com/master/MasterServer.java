@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,16 +19,27 @@
  */
 package org.neo4j.kernel.ha.com.master;
 
-import org.jboss.netty.channel.Channel;
-import org.neo4j.com.*;
-import org.neo4j.kernel.ha.HaRequestType20;
-import org.neo4j.kernel.ha.MasterClient20;
-import org.neo4j.kernel.ha.transaction.UnableToResumeTransactionException;
-import org.neo4j.kernel.logging.Logging;
-import org.neo4j.tooling.RealClock;
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.TreeMap;
 
-import java.io.IOException;
-import java.util.*;
+import org.jboss.netty.channel.Channel;
+
+import org.neo4j.com.Protocol;
+import org.neo4j.com.RequestContext;
+import org.neo4j.com.RequestType;
+import org.neo4j.com.Server;
+import org.neo4j.com.TransactionNotPresentOnMasterException;
+import org.neo4j.com.TxChecksumVerifier;
+import org.neo4j.kernel.ha.HaRequestType201;
+import org.neo4j.kernel.ha.MasterClient201;
+import org.neo4j.kernel.impl.transaction.TransactionAlreadyActiveException;
+import org.neo4j.kernel.logging.Logging;
+
+import static org.neo4j.helpers.Clock.SYSTEM_CLOCK;
 
 /**
  * Sits on the master side, receiving serialized requests from slaves (via
@@ -39,34 +50,42 @@ public class MasterServer extends Server<Master, Void>
     public static final int FRAME_LENGTH = Protocol.DEFAULT_FRAME_LENGTH;
 
     public MasterServer( Master requestTarget, Logging logging, Configuration config,
-                         TxChecksumVerifier txVerifier ) throws IOException
+                         TxChecksumVerifier txVerifier )
     {
-        super( requestTarget, config, logging, FRAME_LENGTH, MasterClient20.PROTOCOL_VERSION, txVerifier,
-                new RealClock() );
+        super( requestTarget, config, logging, FRAME_LENGTH, MasterClient201.PROTOCOL_VERSION, txVerifier,
+                SYSTEM_CLOCK );
     }
 
     @Override
     protected RequestType<Master> getRequestContext( byte id )
     {
-        return HaRequestType20.values()[id];
+        return HaRequestType201.values()[id];
     }
 
     @Override
     protected void finishOffChannel( Channel channel, RequestContext context )
     {
-        getRequestTarget().finishTransaction( context, false );
+        try
+        {
+            getRequestTarget().finishTransaction( context, false );
+        }
+        catch ( TransactionNotPresentOnMasterException e )
+        {
+            // This is OK. This method has been called due to some connection problem or similar,
+            // it's a best-effort to finish of a channel and transactions associated with it.
+        }
     }
 
     @Override
     protected boolean shouldLogFailureToFinishOffChannel( Throwable failure )
     {
-        return !(failure instanceof UnableToResumeTransactionException);
+        return !(failure instanceof TransactionAlreadyActiveException);
     }
 
     public Map<Integer, Collection<RequestContext>> getSlaveInformation()
     {
         // Which slaves are connected a.t.m?
-        Set<Integer> machineIds = new HashSet<Integer>();
+        Set<Integer> machineIds = new HashSet<>();
         Map<Channel, RequestContext> channels = getConnectedSlaveChannels();
         synchronized ( channels )
         {
@@ -87,6 +106,6 @@ public class MasterServer extends Server<Master, Void>
                 ongoingTransactions.put( machineId, Collections.<RequestContext>emptyList() );
             }
         }
-        return new TreeMap<Integer, Collection<RequestContext>>( ongoingTransactions );
+        return new TreeMap<>( ongoingTransactions );
     }
 }

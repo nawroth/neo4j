@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -38,7 +38,7 @@ import static org.neo4j.helpers.collection.IteratorUtil.first;
 import static org.neo4j.kernel.Traversal.bidirectionalTraversal;
 import static org.neo4j.kernel.Traversal.traversal;
 
-public class TestPath extends AbstractTestBase
+public class TestPath extends TraversalTestBase
 {
     private static Node a,b,c,d,e;
     private Transaction tx;

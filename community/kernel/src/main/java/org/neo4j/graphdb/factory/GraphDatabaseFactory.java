@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,20 +19,20 @@
  */
 package org.neo4j.graphdb.factory;
 
-import static org.neo4j.graphdb.factory.GraphDatabaseSetting.TRUE;
-import static org.neo4j.graphdb.factory.GraphDatabaseSettings.read_only;
-
 import java.util.List;
 import java.util.Map;
 
 import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.index.IndexIterable;
-import org.neo4j.graphdb.index.IndexProvider;
 import org.neo4j.kernel.EmbeddedGraphDatabase;
 import org.neo4j.kernel.EmbeddedReadOnlyGraphDatabase;
 import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.kernel.impl.cache.CacheProvider;
 import org.neo4j.kernel.impl.transaction.xaframework.TransactionInterceptorProvider;
+
+import static java.util.Arrays.asList;
+
+import static org.neo4j.graphdb.factory.GraphDatabaseSettings.read_only;
+import static org.neo4j.helpers.Settings.TRUE;
 
 /**
  * Creates a {@link org.neo4j.graphdb.GraphDatabaseService}.
@@ -74,6 +74,7 @@ public class GraphDatabaseFactory
         final GraphDatabaseFactoryState state = getStateCopy();
         return new GraphDatabaseBuilder( new GraphDatabaseBuilder.DatabaseCreator()
         {
+            @SuppressWarnings("deprecation")
             @Override
             public GraphDatabaseService newDatabase( Map<String, String> config )
             {
@@ -82,7 +83,6 @@ public class GraphDatabaseFactory
                 if ( TRUE.equalsIgnoreCase( config.get( read_only.name() ) ) )
                 {
                     return new EmbeddedReadOnlyGraphDatabase( path, config,
-                            state.getIndexProviders(),
                             state.getKernelExtension(),
                             state.getCacheProviders(),
                             state.getTransactionInterceptorProviders() );
@@ -90,7 +90,6 @@ public class GraphDatabaseFactory
                 else
                 {
                     return new EmbeddedGraphDatabase( path, config,
-                            state.getIndexProviders(),
                             state.getKernelExtension(),
                             state.getCacheProviders(),
                             state.getTransactionInterceptorProviders() );
@@ -99,45 +98,69 @@ public class GraphDatabaseFactory
         } );
     }
 
-    public Iterable<IndexProvider> getIndexProviders()
-    {
-        return getCurrentState().getIndexProviders();
-    }
-
-    public GraphDatabaseFactory setIndexProviders( IndexIterable indexIterable )
-    {
-        getCurrentState().setIndexProviders( indexIterable );
-        return this;
-    }
-
+    /**
+     * @deprecated Manipulating kernel extensions is deprecated and will be moved to internal components.
+     */
+    @Deprecated
     public Iterable<KernelExtensionFactory<?>> getKernelExtension()
     {
         return getCurrentState().getKernelExtension();
     }
 
+    /**
+     * @deprecated Manipulating kernel extensions is deprecated and will be moved to internal components.
+     */
+    @Deprecated
     public GraphDatabaseFactory addKernelExtensions( Iterable<KernelExtensionFactory<?>> newKernelExtensions )
     {
         getCurrentState().addKernelExtensions( newKernelExtensions );
         return this;
     }
 
+    /**
+     * @deprecated Manipulating kernel extensions is deprecated and will be moved to internal components.
+     */
+    @Deprecated
+    @SuppressWarnings( { "rawtypes", "unchecked" } )
+    public GraphDatabaseFactory addKernelExtension( KernelExtensionFactory<?> newKernelExtension )
+    {
+        List extensions = asList(newKernelExtension );
+        return addKernelExtensions( extensions );
+    }
+
+    /**
+     * @deprecated Manipulating kernel extensions is deprecated and will be moved to internal components.
+     */
+    @Deprecated
     public GraphDatabaseFactory setKernelExtensions( Iterable<KernelExtensionFactory<?>> newKernelExtensions )
     {
         getCurrentState().setKernelExtensions( newKernelExtensions );
         return this;
     }
 
+    /**
+     * @deprecated Manipulating cache providers is deprecated and will be moved to internal components.
+     */
+    @Deprecated
     public List<CacheProvider> getCacheProviders()
     {
         return getCurrentState().getCacheProviders();
     }
 
+    /**
+     * @deprecated Manipulating cache providers is deprecated and will be moved to internal components.
+     */
+    @Deprecated
     public GraphDatabaseFactory setCacheProviders( Iterable<CacheProvider> newCacheProviders )
     {
         getCurrentState().setCacheProviders( newCacheProviders );
         return this;
     }
 
+    /**
+     * @deprecated Manipulating cache providers is deprecated and will be moved to internal components.
+     */
+    @Deprecated
     public List<TransactionInterceptorProvider> getTransactionInterceptorProviders()
     {
         return getCurrentState().getTransactionInterceptorProviders();

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -85,6 +85,10 @@ public class LogbackService
                 {
                     JoranConfigurator configurator = new JoranConfigurator();
                     configurator.setContext( loggerContext );
+
+                    if (config.getParams().containsKey( "ha.server_id" ))
+                        loggerContext.putProperty( "host", config.getParams().get( "ha.server_id" ) );
+
                     loggerContext.putProperty( "neo_store", storeDir.getPath() );
                     loggerContext.putProperty( "remote_logging_enabled", config.get( GraphDatabaseSettings
                             .remote_logging_enabled ).toString() );

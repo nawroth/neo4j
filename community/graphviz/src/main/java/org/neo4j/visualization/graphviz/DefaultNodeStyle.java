@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -20,10 +20,10 @@
 package org.neo4j.visualization.graphviz;
 
 import java.io.IOException;
+import java.util.Iterator;
 
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
-import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.visualization.PropertyType;
 
 class DefaultNodeStyle implements NodeStyle
@@ -35,6 +35,7 @@ class DefaultNodeStyle implements NodeStyle
         this.config = configuration;
     }
 
+    @Override
     public void emitNodeStart( Appendable stream, Node node )
             throws IOException
     {
@@ -42,29 +43,33 @@ class DefaultNodeStyle implements NodeStyle
         config.emit( node, stream );
         stream.append( "    label = \"{"
                        + config.escapeLabel( config.getTitle( node ) ) );
-        ResourceIterator<Label> labels = node.getLabels()
-                .iterator();
+        Iterator<Label> labels = node.getLabels().iterator();
         if ( labels.hasNext() )
         {
-            stream.append( ": " );
-            while ( labels.hasNext() )
+            if ( labels.hasNext() )
             {
-                stream.append( labels.next()
-                        .name() );
-                if ( labels.hasNext() )
+                stream.append( ": " );
+                while ( labels.hasNext() )
                 {
-                    stream.append( ", " );
+                    stream.append( labels.next()
+                            .name() );
+                    if ( labels.hasNext() )
+                    {
+                        stream.append( ", " );
+                    }
                 }
             }
+            stream.append( "|" );
         }
-        stream.append( "|" );
     }
 
+    @Override
     public void emitEnd( Appendable stream ) throws IOException
     {
         stream.append( "}\"\n  ]\n" );
     }
 
+    @Override
     public void emitProperty( Appendable stream, String key, Object value )
             throws IOException
     {

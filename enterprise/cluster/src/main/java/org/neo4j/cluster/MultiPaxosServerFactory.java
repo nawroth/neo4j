@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,41 +19,34 @@
  */
 package org.neo4j.cluster;
 
-import static org.neo4j.cluster.com.message.Message.internal;
-
 import java.net.URI;
 import java.util.concurrent.Executor;
 
 import org.neo4j.cluster.com.message.MessageSender;
 import org.neo4j.cluster.com.message.MessageSource;
-import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.AcceptorContext;
+import org.neo4j.cluster.protocol.atomicbroadcast.ObjectInputStreamFactory;
+import org.neo4j.cluster.protocol.atomicbroadcast.ObjectOutputStreamFactory;
 import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.AcceptorInstanceStore;
 import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.AcceptorMessage;
 import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.AcceptorState;
-import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.AtomicBroadcastContext;
 import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.AtomicBroadcastMessage;
 import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.AtomicBroadcastState;
-import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.LearnerContext;
 import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.LearnerMessage;
 import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.LearnerState;
-import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.MultiPaxosContext;
-import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.ProposerContext;
 import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.ProposerMessage;
 import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.ProposerState;
+import org.neo4j.cluster.protocol.atomicbroadcast.multipaxos.context.MultiPaxosContext;
 import org.neo4j.cluster.protocol.cluster.Cluster;
 import org.neo4j.cluster.protocol.cluster.ClusterConfiguration;
-import org.neo4j.cluster.protocol.cluster.ClusterContext;
 import org.neo4j.cluster.protocol.cluster.ClusterMessage;
 import org.neo4j.cluster.protocol.cluster.ClusterState;
 import org.neo4j.cluster.protocol.election.ClusterLeaveReelectionListener;
 import org.neo4j.cluster.protocol.election.Election;
-import org.neo4j.cluster.protocol.election.ElectionContext;
 import org.neo4j.cluster.protocol.election.ElectionCredentialsProvider;
 import org.neo4j.cluster.protocol.election.ElectionMessage;
 import org.neo4j.cluster.protocol.election.ElectionRole;
 import org.neo4j.cluster.protocol.election.ElectionState;
 import org.neo4j.cluster.protocol.election.HeartbeatReelectionListener;
-import org.neo4j.cluster.protocol.heartbeat.HeartbeatContext;
 import org.neo4j.cluster.protocol.heartbeat.HeartbeatIAmAliveProcessor;
 import org.neo4j.cluster.protocol.heartbeat.HeartbeatJoinListener;
 import org.neo4j.cluster.protocol.heartbeat.HeartbeatMessage;
@@ -69,6 +62,8 @@ import org.neo4j.cluster.timeout.TimeoutStrategy;
 import org.neo4j.cluster.timeout.Timeouts;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.kernel.logging.Logging;
+
+import static org.neo4j.cluster.com.message.Message.internal;
 
 /**
  * Factory for MultiPaxos {@link ProtocolServer}s.
@@ -89,50 +84,68 @@ public class MultiPaxosServerFactory
     public ProtocolServer newProtocolServer( InstanceId me, TimeoutStrategy timeoutStrategy, MessageSource input,
                                              MessageSender output, AcceptorInstanceStore acceptorInstanceStore,
                                              ElectionCredentialsProvider electionCredentialsProvider,
-                                             Executor stateMachineExecutor )
+                                             Executor stateMachineExecutor,
+                                             ObjectInputStreamFactory objectInputStreamFactory,
+                                             ObjectOutputStreamFactory objectOutputStreamFactory )
     {
         LatencyCalculator latencyCalculator = new LatencyCalculator( timeoutStrategy, input );
 
         DelayedDirectExecutor executor = new DelayedDirectExecutor();
 
         // Create state machines
-        StateMachines stateMachines = new StateMachines( input, output, latencyCalculator,
-                executor, stateMachineExecutor );
-        Timeouts timeouts = stateMachines.getTimeouts();
+        Timeouts timeouts = new Timeouts( timeoutStrategy );
+
+        final MultiPaxosContext context = new MultiPaxosContext( me,
+                Iterables.<ElectionRole,ElectionRole>iterable( new ElectionRole(ClusterConfiguration.COORDINATOR )),
+                new ClusterConfiguration( initialConfig.getName(), logging.getMessagesLog( ClusterConfiguration.class ),
+                        initialConfig.getMemberURIs() ),
+                executor, logging, objectInputStreamFactory, objectOutputStreamFactory, acceptorInstanceStore, timeouts,
+                electionCredentialsProvider);
+
+        SnapshotContext snapshotContext = new SnapshotContext( context.getClusterContext(),context.getLearnerContext());
+
+        return newProtocolServer( me, input, output, stateMachineExecutor, latencyCalculator, executor, timeouts,
+                context, snapshotContext );
+    }
+
+    public ProtocolServer newProtocolServer( InstanceId me, MessageSource input, MessageSender output,
+                                              Executor stateMachineExecutor, LatencyCalculator latencyCalculator,
+                                              DelayedDirectExecutor executor, Timeouts timeouts,
+                                              MultiPaxosContext context, SnapshotContext snapshotContext )
+    {
+        return constructSupportingInfrastructureFor( me, input, output, executor, timeouts, latencyCalculator,
+                stateMachineExecutor, context, new StateMachine[]
+        {
+                new StateMachine( context.getAtomicBroadcastContext(), AtomicBroadcastMessage.class,
+                        AtomicBroadcastState.start, logging ),
+                new StateMachine( context.getAcceptorContext(), AcceptorMessage.class, AcceptorState.start, logging ),
+                new StateMachine( context.getProposerContext(), ProposerMessage.class, ProposerState.start, logging ),
+                new StateMachine( context.getLearnerContext(), LearnerMessage.class, LearnerState.start, logging ),
+                new StateMachine( context.getHeartbeatContext(), HeartbeatMessage.class, HeartbeatState.start,
+                        logging ),
+                new StateMachine( context.getElectionContext(), ElectionMessage.class, ElectionState.start, logging ),
+                new StateMachine( snapshotContext, SnapshotMessage.class, SnapshotState.start, logging ),
+                new StateMachine( context.getClusterContext(), ClusterMessage.class, ClusterState.start, logging )
+        });
+    }
+
+    /**
+     * Sets up the supporting infrastructure and communication hooks for our state machines. This is here to support
+     * an external requirement for assembling protocol servers given an existing set of state machines (used to prove
+     * correctness).
+     * */
+    public ProtocolServer constructSupportingInfrastructureFor( InstanceId me, MessageSource input,
+                    MessageSender output, DelayedDirectExecutor executor, Timeouts timeouts,
+                    LatencyCalculator latencyCalculator, Executor stateMachineExecutor, final MultiPaxosContext context,
+                    StateMachine[] machines )
+    {
+        StateMachines stateMachines = new StateMachines( input, output, timeouts, executor, stateMachineExecutor );
         stateMachines.addMessageProcessor( latencyCalculator );
 
-        AcceptorContext acceptorContext = new AcceptorContext( logging, acceptorInstanceStore );
-        LearnerContext learnerContext = new LearnerContext(acceptorInstanceStore);
-        ProposerContext proposerContext = new ProposerContext();
-
-        final ClusterContext clusterContext = new ClusterContext( me, proposerContext, learnerContext,
-                new ClusterConfiguration( initialConfig.getName(), initialConfig.getMemberURIs() ), timeouts, executor,
-                logging );
-        final HeartbeatContext heartbeatContext = new HeartbeatContext( clusterContext, learnerContext, executor );
-        clusterContext.setHeartbeatContext( heartbeatContext );
-        final MultiPaxosContext context = new MultiPaxosContext( clusterContext, proposerContext, learnerContext,
-                heartbeatContext, timeouts );
-        ElectionContext electionContext = new ElectionContext( Iterables.<ElectionRole,ElectionRole>iterable( new ElectionRole(
-                ClusterConfiguration.COORDINATOR ) ),
-                clusterContext, heartbeatContext );
-        SnapshotContext snapshotContext = new SnapshotContext( clusterContext, learnerContext );
-        AtomicBroadcastContext atomicBroadcastContext = new AtomicBroadcastContext( clusterContext, executor );
-
-        stateMachines.addStateMachine( new StateMachine( atomicBroadcastContext,
-                AtomicBroadcastMessage.class, AtomicBroadcastState.start, logging ) );
-        stateMachines.addStateMachine( new StateMachine( acceptorContext, AcceptorMessage.class,
-                AcceptorState.start, logging ) );
-        stateMachines.addStateMachine( new StateMachine( context, ProposerMessage.class,
-                ProposerState.start, logging ) );
-        stateMachines.addStateMachine( new StateMachine( context, LearnerMessage.class, LearnerState.start, logging ) );
-        stateMachines.addStateMachine( new StateMachine( heartbeatContext, HeartbeatMessage.class,
-                HeartbeatState.start, logging ) );
-        stateMachines.addStateMachine( new StateMachine( electionContext, ElectionMessage.class,
-                ElectionState.start, logging ) );
-        stateMachines.addStateMachine( new StateMachine( snapshotContext, SnapshotMessage.class,
-                SnapshotState.start, logging ) );
-        stateMachines.addStateMachine( new StateMachine( clusterContext, ClusterMessage.class,
-                ClusterState.start, logging ) );
+        for ( StateMachine machine : machines )
+        {
+            stateMachines.addStateMachine( machine );
+        }
 
         final ProtocolServer server = new ProtocolServer( me, stateMachines, logging );
 
@@ -141,23 +154,23 @@ public class MultiPaxosServerFactory
             @Override
             public void listeningAt( URI me )
             {
-                clusterContext.setBoundAt( me );
+                context.getClusterContext().setBoundAt( me );
             }
         } );
 
         stateMachines.addMessageProcessor( new HeartbeatRefreshProcessor( stateMachines.getOutgoing
-                (), clusterContext ) );
+                (), context.getClusterContext() ) );
         input.addMessageProcessor( new HeartbeatIAmAliveProcessor( stateMachines.getOutgoing(),
-                clusterContext ) );
+                context.getClusterContext() ) );
 
         server.newClient( Cluster.class ).addClusterListener( new HeartbeatJoinListener( stateMachines
                 .getOutgoing() ) );
 
-        heartbeatContext.addHeartbeatListener( new HeartbeatReelectionListener( server.newClient( Election
-                .class ), logging.getMessagesLog( ClusterLeaveReelectionListener.class ) ) );
-        clusterContext.addClusterListener( new ClusterLeaveReelectionListener( server.newClient( Election.class ),
+        context.getHeartbeatContext().addHeartbeatListener( new HeartbeatReelectionListener(
+                server.newClient( Election.class ), logging.getMessagesLog( ClusterLeaveReelectionListener.class ) ) );
+        context.getClusterContext().addClusterListener( new ClusterLeaveReelectionListener( server.newClient(
+                Election.class ),
                 logging.getMessagesLog( ClusterLeaveReelectionListener.class ) ) );
-        electionContext.setElectionCredentialsProvider( electionCredentialsProvider );
 
         StateMachineRules rules = new StateMachineRules( stateMachines.getOutgoing() )
                 .rule( ClusterState.start, ClusterMessage.create, ClusterState.entered,

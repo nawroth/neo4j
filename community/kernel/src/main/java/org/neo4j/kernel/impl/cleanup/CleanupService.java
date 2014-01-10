@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,12 +19,9 @@
  */
 package org.neo4j.kernel.impl.cleanup;
 
-import static java.lang.String.format;
-
-import java.io.Closeable;
-import java.io.IOException;
 import java.util.Iterator;
 
+import org.neo4j.graphdb.Resource;
 import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.helpers.Thunk;
 import org.neo4j.kernel.impl.util.JobScheduler;
@@ -32,13 +29,15 @@ import org.neo4j.kernel.impl.util.StringLogger;
 import org.neo4j.kernel.lifecycle.LifecycleAdapter;
 import org.neo4j.kernel.logging.Logging;
 
+import static java.lang.String.format;
+
 public abstract class CleanupService extends LifecycleAdapter
 {
     /**
      * @param scheduler {@link JobScheduler} to add the cleanup job on.
      * @param logging {@link Logging} where cleanup happens.
      * @param cleanupNecessity {@link Thunk} for deciding what gets registered at this CleanupService and
-     * what doesn't. More specifically 
+     * what doesn't. More specifically
      * @return a new {@link CleanupService}.
      */
     public static CleanupService create( JobScheduler scheduler, Logging logging, Thunk<Boolean> cleanupNecessity )
@@ -55,7 +54,7 @@ public abstract class CleanupService extends LifecycleAdapter
         this.logger = logging.getMessagesLog( getClass() );
     }
 
-    public abstract <T> ResourceIterator<T> resourceIterator( Iterator<T> iterator, Closeable closeable );
+    public abstract <T> ResourceIterator<T> resourceIterator( Iterator<T> iterator, Resource resource );
 
     void cleanup( CleanupReference reference )
     {
@@ -63,7 +62,7 @@ public abstract class CleanupService extends LifecycleAdapter
         {
             reference.cleanupNow( false );
         }
-        catch ( IOException e )
+        catch ( Exception e )
         {
             logger.warn( "Failure autoclosing a resource during collection", e );
         }

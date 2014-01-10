@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -35,6 +35,7 @@ import org.neo4j.graphdb.index.AutoIndexer;
 import org.neo4j.graphdb.index.Index;
 import org.neo4j.graphdb.index.ReadableIndex;
 import org.neo4j.graphdb.index.RelationshipIndex;
+import org.neo4j.kernel.impl.core.NodeManager;
 import org.neo4j.test.ImpermanentGraphDatabase;
 import org.neo4j.test.TestGraphDatabaseFactory;
 
@@ -652,7 +653,7 @@ public class TestAutoIndexing
                 1 } );
 
         newTransaction();
-        graphDb.getNodeManager().clearCache();
+        graphDb.getDependencyResolver().resolveDependency( NodeManager.class ).clearCache();
         node1.removeProperty( "nodeProp" );
         newTransaction();
         assertFalse( node1.hasProperty( "nodeProp" ) );

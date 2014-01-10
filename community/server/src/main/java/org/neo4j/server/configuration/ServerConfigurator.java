@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -47,11 +47,11 @@ import org.neo4j.server.WrappingNeoServerBootstrapper;
  * See the neo4j manual for information about what configuration directives the
  * server takes, or take a look at the static strings in {@link Configurator}.
  */
-public class ServerConfigurator implements Configurator
+public class ServerConfigurator extends Configurator.Adapter
 {
 
     private MapBasedConfiguration config = new MapBasedConfiguration();
-    private Set<ThirdPartyJaxRsPackage> jaxRsPackages = new HashSet<ThirdPartyJaxRsPackage>();
+    private Set<ThirdPartyJaxRsPackage> jaxRsPackages = new HashSet<>();
 
     public ServerConfigurator( GraphDatabaseAPI db )
     {

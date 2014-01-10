@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -26,7 +26,7 @@ import org.neo4j.kernel.impl.nioneo.store.RecordStore;
 
 import static java.lang.String.format;
 
-class StoreProcessorTask<R extends AbstractBaseRecord> implements Runnable
+class StoreProcessorTask<R extends AbstractBaseRecord> implements StoppableRunnable
 {
     private final RecordStore<R> store;
     private final StoreProcessor[] processors;
@@ -117,6 +117,7 @@ class StoreProcessorTask<R extends AbstractBaseRecord> implements Runnable
         // intentionally empty
     }
 
+    @Override
     public void stopScanning()
     {
         processors[0].stopScanning();

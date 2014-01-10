@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,8 +19,6 @@
  */
 package org.neo4j.kernel;
 
-import static org.junit.Assert.assertSame;
-
 import org.junit.Rule;
 import org.junit.Test;
 import org.neo4j.cluster.ClusterSettings;
@@ -29,6 +27,8 @@ import org.neo4j.kernel.ha.HighlyAvailableGraphDatabase;
 import org.neo4j.test.ManagedResource;
 import org.neo4j.test.TargetDirectory;
 
+import static org.junit.Assert.*;
+
 public class HaKernelDataTest
 {
     @Test
@@ -36,7 +36,7 @@ public class HaKernelDataTest
     {
         // given
         HighlyAvailableGraphDatabase haGraphDb = ha.getResource();
-        KernelData kernelData = haGraphDb.getKernelData();
+        KernelData kernelData = haGraphDb.getDependencyResolver().resolveDependency( KernelData.class );
 
         // then
         assertSame( kernelData.graphDatabase(), haGraphDb );

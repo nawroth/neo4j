@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,10 +19,6 @@
  */
 package org.neo4j.kernel.impl.core;
 
-import static org.junit.Assert.fail;
-import static org.neo4j.kernel.impl.nioneo.store.TestXa.copyLogicalLog;
-import static org.neo4j.kernel.impl.nioneo.store.TestXa.renameCopiedLogicalLog;
-
 import java.io.File;
 import java.io.IOException;
 import java.nio.ByteBuffer;
@@ -36,8 +32,13 @@ import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.helpers.Pair;
 import org.neo4j.kernel.GraphDatabaseAPI;
+import org.neo4j.kernel.impl.transaction.XaDataSourceManager;
 import org.neo4j.test.EphemeralFileSystemRule;
 import org.neo4j.test.TestGraphDatabaseFactory;
+
+import static org.junit.Assert.*;
+import static org.neo4j.kernel.impl.nioneo.store.TestXa.copyLogicalLog;
+import static org.neo4j.kernel.impl.nioneo.store.TestXa.renameCopiedLogicalLog;
 
 public class TestChangingOfLogFormat
 {
@@ -46,7 +47,8 @@ public class TestChangingOfLogFormat
     {
         File storeDir = new File( "target/var/oldlog" );
         GraphDatabaseService db = factory.newImpermanentDatabase( storeDir.getPath() );
-        File logBaseFileName = ((GraphDatabaseAPI)db).getXaDataSourceManager().getNeoStoreDataSource().getXaContainer().getLogicalLog().getBaseFileName();
+        File logBaseFileName = ((GraphDatabaseAPI)db).getDependencyResolver().resolveDependency( XaDataSourceManager
+                .class ).getNeoStoreDataSource().getXaContainer().getLogicalLog().getBaseFileName();
         Transaction tx = db.beginTx();
         db.createNode();
         tx.success();

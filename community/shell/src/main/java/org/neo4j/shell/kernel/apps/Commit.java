@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,12 +19,11 @@
  */
 package org.neo4j.shell.kernel.apps;
 
-import static org.neo4j.shell.ShellException.wrapCause;
-
 import java.rmi.RemoteException;
 
 import javax.transaction.SystemException;
 import javax.transaction.Transaction;
+import javax.transaction.TransactionManager;
 
 import org.neo4j.helpers.Service;
 import org.neo4j.shell.App;
@@ -34,6 +33,8 @@ import org.neo4j.shell.Output;
 import org.neo4j.shell.Session;
 import org.neo4j.shell.ShellException;
 import org.neo4j.shell.Variables;
+
+import static org.neo4j.shell.ShellException.wrapCause;
 
 @Service.Implementation(App.class)
 public class Commit extends NonTransactionProvidingApp
@@ -49,9 +50,9 @@ public class Commit extends NonTransactionProvidingApp
     {
         try
         {
-
-            return getServer().getDb().getTxManager().getTransaction();
-        } catch ( SystemException e )
+            return getServer().getDb().getDependencyResolver().resolveDependency( TransactionManager.class ).getTransaction();
+        }
+        catch ( SystemException e )
         {
             throw wrapCause( e );
         }
@@ -76,7 +77,8 @@ public class Commit extends NonTransactionProvidingApp
             {
                 out.println( "Warning: committing a transaction not started by the shell" );
                 txCount = 1;
-            } else
+            }
+            else
             {
                 throw new ShellException( "Not in a transaction" );
             }
@@ -95,11 +97,13 @@ public class Commit extends NonTransactionProvidingApp
                 session.remove( Variables.TX_COUNT );
                 out.println( "Transaction committed" );
                 return Continuation.INPUT_COMPLETE;
-            } catch ( Exception e )
+            }
+            catch ( Exception e )
             {
                 throw fail( session, e.getMessage() );
             }
-        } else
+        }
+        else
         {
             session.set( Variables.TX_COUNT, --txCount );
             out.println( String.format( "Nested transaction committed (Tx count: %d)", txCount ) );

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,20 +19,23 @@
  */
 package org.neo4j.kernel.impl.api.constraints;
 
-import java.util.Iterator;
+import java.util.ArrayList;
+import java.util.List;
 
 import org.junit.Test;
-import org.neo4j.kernel.api.StatementOperationParts;
+
+import org.neo4j.kernel.impl.api.KernelStatement;
+import org.neo4j.kernel.impl.api.StatementOperationParts;
+import org.neo4j.kernel.impl.core.Transactor;
 import org.neo4j.kernel.api.exceptions.KernelException;
 import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
+import org.neo4j.kernel.api.exceptions.schema.ConstraintVerificationFailedKernelException;
 import org.neo4j.kernel.api.index.PreexistingIndexEntryConflictException;
-import org.neo4j.kernel.api.operations.StatementState;
-import org.neo4j.kernel.impl.api.Transactor;
-import org.neo4j.kernel.impl.api.index.IndexDescriptor;
+import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.impl.api.index.IndexProxy;
 import org.neo4j.kernel.impl.api.index.IndexingService;
-
-import static java.util.Arrays.asList;
+import org.neo4j.kernel.impl.api.state.ConstraintIndexCreator;
+import org.neo4j.kernel.impl.api.state.TxState;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
@@ -42,8 +45,10 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.verifyZeroInteractions;
 import static org.mockito.Mockito.when;
+
 import static org.neo4j.kernel.impl.api.StatementOperationsTestHelper.mockedParts;
 import static org.neo4j.kernel.impl.api.StatementOperationsTestHelper.mockedState;
+import static org.neo4j.kernel.impl.nioneo.store.SchemaStorage.IndexRuleKind.CONSTRAINT;
 
 public class ConstraintIndexCreatorTest
 {
@@ -55,13 +60,13 @@ public class ConstraintIndexCreatorTest
         StatementOperationParts indexCreationContext = mockedParts();
 
         IndexDescriptor descriptor = new IndexDescriptor( 123, 456 );
-        StatementState state = mockedState();
-        when( indexCreationContext.schemaWriteOperations().uniqueIndexCreate( state, 123, 456 ) ).thenReturn( descriptor );
+        KernelStatement state = mockedState();
 
         IndexingService indexingService = mock( IndexingService.class );
-        StubTransactor transactor = new StubTransactor( state, indexCreationContext );
+        StubTransactor transactor = new StubTransactor();
 
-        when( constraintCreationContext.schemaReadOperations().indexGetCommittedId( state, descriptor ) ).thenReturn( 2468l );
+        when( constraintCreationContext.schemaReadOperations().indexGetCommittedId( state, descriptor, CONSTRAINT ) )
+                .thenReturn( 2468l );
         IndexProxy indexProxy = mock( IndexProxy.class );
         when( indexingService.getProxyForRule( 2468l ) ).thenReturn( indexProxy );
 
@@ -72,9 +77,10 @@ public class ConstraintIndexCreatorTest
 
         // then
         assertEquals( 2468l, indexId );
-        verify( indexCreationContext.schemaWriteOperations() ).uniqueIndexCreate( state, 123, 456 );
+        assertEquals( 1, transactor.transactions.size() );
+        verify( transactor.transactions.get( 0 ).txState() ).constraintIndexRuleDoAdd( descriptor );
         verifyNoMoreInteractions( indexCreationContext.schemaWriteOperations() );
-        verify( constraintCreationContext.schemaReadOperations() ).indexGetCommittedId( state, descriptor );
+        verify( constraintCreationContext.schemaReadOperations() ).indexGetCommittedId( state, descriptor, CONSTRAINT );
         verifyNoMoreInteractions( constraintCreationContext.schemaReadOperations() );
         verify( indexProxy ).awaitStoreScanCompleted();
     }
@@ -84,21 +90,20 @@ public class ConstraintIndexCreatorTest
     {
         // given
         StatementOperationParts constraintCreationContext = mockedParts();
-        StatementOperationParts indexCreationContext = mockedParts();
-        StatementOperationParts indexDestructionContext = mockedParts();
-        StatementState state = mockedState();
+        KernelStatement state = mockedState();
 
         IndexDescriptor descriptor = new IndexDescriptor( 123, 456 );
-        when( indexCreationContext.schemaWriteOperations().uniqueIndexCreate( state, 123, 456 ) ).thenReturn( descriptor );
 
         IndexingService indexingService = mock( IndexingService.class );
-        StubTransactor transactor = new StubTransactor( state, indexCreationContext, indexDestructionContext );
+        StubTransactor transactor = new StubTransactor();
 
-        when( constraintCreationContext.schemaReadOperations().indexGetCommittedId( state, descriptor ) ).thenReturn( 2468l );
+        when( constraintCreationContext.schemaReadOperations().indexGetCommittedId( state, descriptor, CONSTRAINT ) )
+                .thenReturn( 2468l );
         IndexProxy indexProxy = mock( IndexProxy.class );
         when( indexingService.getProxyForRule( 2468l ) ).thenReturn( indexProxy );
-        doThrow( new IndexPopulationFailedKernelException( descriptor, new PreexistingIndexEntryConflictException( "a", 2, 1 ) ) )
-                .when( indexProxy ).awaitStoreScanCompleted();
+        PreexistingIndexEntryConflictException cause = new PreexistingIndexEntryConflictException("a", 2, 1);
+        doThrow( new IndexPopulationFailedKernelException( descriptor, "some index", cause) )
+                .when(indexProxy).awaitStoreScanCompleted();
 
         ConstraintIndexCreator creator = new ConstraintIndexCreator( transactor, indexingService );
 
@@ -115,21 +120,22 @@ public class ConstraintIndexCreatorTest
             assertEquals( "Existing data does not satisfy CONSTRAINT ON ( n:label[123] ) ASSERT n.property[456] IS UNIQUE.",
                           e.getMessage() );
         }
-        verify( indexCreationContext.schemaWriteOperations() ).uniqueIndexCreate( state, 123, 456 );
-        verifyNoMoreInteractions( indexCreationContext.schemaWriteOperations() );
-        verify( constraintCreationContext.schemaReadOperations() ).indexGetCommittedId( state, descriptor );
+        assertEquals( 2, transactor.transactions.size() );
+        TxState tx1 = transactor.transactions.get( 0 ).txState();
+        verify( tx1 ).constraintIndexRuleDoAdd( new IndexDescriptor( 123, 456 ) );
+        verifyNoMoreInteractions( tx1 );
+        verify( constraintCreationContext.schemaReadOperations() ).indexGetCommittedId( state, descriptor, CONSTRAINT );
         verifyNoMoreInteractions( constraintCreationContext.schemaReadOperations() );
-        verify( indexDestructionContext.schemaWriteOperations() ).uniqueIndexDrop( state, descriptor );
-        verifyNoMoreInteractions( indexDestructionContext.schemaWriteOperations() );
+        TxState tx2 = transactor.transactions.get( 1 ).txState();
+        verify( tx2 ).constraintIndexDoDrop( new IndexDescriptor( 123, 456 ) );
+        verifyNoMoreInteractions( tx2 );
     }
 
     @Test
     public void shouldDropIndexInAnotherTransaction() throws Exception
     {
         // given
-        StatementOperationParts indexDestructionTransaction = mockedParts();
-        StatementState state = mockedState();
-        StubTransactor transactor = new StubTransactor( state, indexDestructionTransaction );
+        StubTransactor transactor = new StubTransactor();
         IndexingService indexingService = mock( IndexingService.class );
 
         IndexDescriptor descriptor = new IndexDescriptor( 123, 456 );
@@ -140,28 +146,27 @@ public class ConstraintIndexCreatorTest
         creator.dropUniquenessConstraintIndex( descriptor );
 
         // then
+        assertEquals( 1, transactor.transactions.size() );
+        verify( transactor.transactions.get( 0 ).txState() ).constraintIndexDoDrop( descriptor );
         verifyZeroInteractions( indexingService );
-        verify( indexDestructionTransaction.schemaWriteOperations() ).uniqueIndexDrop( state, descriptor );
-        verifyNoMoreInteractions( indexDestructionTransaction.schemaWriteOperations() );
     }
 
     private static class StubTransactor extends Transactor
     {
-        private final Iterator<StatementOperationParts> mockContexts;
-        private final StatementState state;
+        final List<KernelStatement> transactions = new ArrayList<>();
 
-        StubTransactor( StatementState state, StatementOperationParts... mockContexts )
+        StubTransactor()
         {
-            super( null );
-            this.state = state;
-            this.mockContexts = asList( mockContexts ).iterator();
+            super( null, null );
         }
 
         @Override
         public <RESULT, FAILURE extends KernelException> RESULT execute(
-                Statement<RESULT, FAILURE> statement ) throws FAILURE
+                Work<RESULT, FAILURE> work ) throws FAILURE
         {
-            return statement.perform( mockContexts.next(), state );
+            KernelStatement state = mockedState();
+            transactions.add( state );
+            return work.perform( state );
         }
     }
 }

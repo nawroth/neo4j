@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -31,6 +31,8 @@ public interface IndexReaderFactory
 {
     IndexReader newReader( long indexId ) throws IndexNotFoundKernelException;
 
+    IndexReader newUnCachedReader( long indexId ) throws IndexNotFoundKernelException;
+
     void close();
 
     class Caching implements IndexReaderFactory
@@ -48,17 +50,22 @@ public interface IndexReaderFactory
         {
             if( indexReaders == null )
             {
-                indexReaders = new HashMap<Long, IndexReader>();
+                indexReaders = new HashMap<>();
             }
 
             IndexReader reader = indexReaders.get( indexId );
             if ( reader == null )
             {
-                IndexProxy index = indexingService.getProxyForRule( indexId );
-                reader = index.newReader();
+                reader = newUnCachedReader( indexId );
                 indexReaders.put( indexId, reader );
             }
             return reader;
+        }
+
+        public IndexReader newUnCachedReader( long indexId ) throws IndexNotFoundKernelException
+        {
+            IndexProxy index = indexingService.getProxyForRule( indexId );
+            return index.newReader();
         }
 
         @Override

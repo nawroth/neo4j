@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -22,7 +22,6 @@ package org.neo4j.ext.udc.impl;
 import java.util.Timer;
 
 import org.neo4j.ext.udc.UdcSettings;
-import org.neo4j.helpers.HostnamePort;
 import org.neo4j.kernel.KernelData;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.transaction.XaDataSourceManager;
@@ -67,7 +66,7 @@ public class UdcKernelExtension implements Lifecycle
 
         int firstDelay = config.get( UdcSettings.first_delay );
         int interval = config.get( UdcSettings.interval );
-        HostnamePort hostAddress = config.get( UdcSettings.udc_host );
+        String hostAddress = config.get(UdcSettings.udc_host);
 
         UdcInformationCollector collector = new DefaultUdcInformationCollector( config, xadsm, kernelData );
         UdcTimerTask task = new UdcTimerTask( hostAddress, collector );

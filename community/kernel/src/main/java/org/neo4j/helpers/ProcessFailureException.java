@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -72,7 +72,7 @@ public class ProcessFailureException extends Exception
     @SuppressWarnings("ThrowableResultOfMethodCallIgnored")
     private static Throwable cause( List<Entry> causes )
     {
-        return causes.size() == 1 ? causes.get( 0 ).failure : null;
+        return causes.size() >= 1 ? causes.get( 0 ).failure : null;
     }
 
     @Override

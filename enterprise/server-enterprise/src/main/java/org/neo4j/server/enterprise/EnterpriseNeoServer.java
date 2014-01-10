@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -38,7 +38,8 @@ import static java.util.Arrays.asList;
 
 import static org.neo4j.helpers.collection.Iterables.mix;
 
-public class EnterpriseNeoServer extends AdvancedNeoServer {
+public class EnterpriseNeoServer extends AdvancedNeoServer
+{
 
     public EnterpriseNeoServer( Configurator configurator )
     {

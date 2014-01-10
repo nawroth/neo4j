@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -62,14 +62,14 @@ public class PluginManagerTest
         Map<String, List<String>> extensions = manager.getExensionsFor( GraphDatabaseService.class );
         List<String> methods = extensions.get( FunctionalTestPlugin.class.getSimpleName() );
         assertNotNull( methods );
-        assertThat( methods, hasItem( FunctionalTestPlugin.GET_REFERENCE_NODE ) );
+        assertThat( methods, hasItem( FunctionalTestPlugin.CREATE_NODE ) );
     }
 
     @Test
     public void canInvokeExtension() throws Exception
     {
         manager.invoke( graphDb, FunctionalTestPlugin.class.getSimpleName(), GraphDatabaseService.class,
-                FunctionalTestPlugin.GET_REFERENCE_NODE, graphDb,
+                FunctionalTestPlugin.CREATE_NODE, graphDb,
                 new NullFormat( null, (MediaType[]) null ).readParameterList( "" ) );
     }
 }

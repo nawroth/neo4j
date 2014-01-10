@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -71,8 +71,6 @@ public class IllBehavingXaDataSource extends XaDataSource
 
         public void destroy()
         {
-            // TODO Auto-generated method stub
-            
         }
 
         public XAResource getXaResource()
@@ -131,7 +129,6 @@ public class IllBehavingXaDataSource extends XaDataSource
 
         public int prepare( Xid xid ) throws XAException
         {
-            // TODO Auto-generated method stub
             return XAResource.XA_OK;
         }
 
@@ -147,7 +144,6 @@ public class IllBehavingXaDataSource extends XaDataSource
 
         public boolean setTransactionTimeout( int seconds ) throws XAException
         {
-            // TODO Auto-generated method stub
             return false;
         }
 

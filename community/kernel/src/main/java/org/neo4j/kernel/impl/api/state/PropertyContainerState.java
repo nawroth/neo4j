@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,19 +19,19 @@
  */
 package org.neo4j.kernel.impl.api.state;
 
-import org.neo4j.kernel.api.properties.Property;
-import org.neo4j.kernel.impl.api.DiffSets;
+import org.neo4j.kernel.api.properties.DefinedProperty;
+import org.neo4j.kernel.impl.util.DiffSets;
 
 public class PropertyContainerState extends EntityState
 {
-    private DiffSets<Property> propertyDiffSets;
+    private DiffSets<DefinedProperty> propertyDiffSets;
 
     public PropertyContainerState( long id )
     {
         super( id );
     }
 
-    public DiffSets<Property> propertyDiffSets()
+    public DiffSets<DefinedProperty> propertyDiffSets()
     {
         if ( null == propertyDiffSets )
         {

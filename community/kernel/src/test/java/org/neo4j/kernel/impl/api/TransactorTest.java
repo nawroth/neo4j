@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,69 +21,55 @@ package org.neo4j.kernel.impl.api;
 
 import javax.transaction.NotSupportedException;
 import javax.transaction.SystemException;
-import javax.transaction.Transaction;
 
 import org.junit.Test;
 import org.mockito.InOrder;
 import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.StatementOperationParts;
-import org.neo4j.kernel.api.exceptions.BeginTransactionFailureException;
+import org.neo4j.kernel.api.Statement;
+import org.neo4j.kernel.impl.core.Transactor;
 import org.neo4j.kernel.api.exceptions.KernelException;
 import org.neo4j.kernel.api.exceptions.TransactionFailureException;
-import org.neo4j.kernel.api.operations.StatementState;
+import org.neo4j.kernel.impl.persistence.PersistenceManager;
 import org.neo4j.kernel.impl.transaction.AbstractTransactionManager;
 
-import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertSame;
-import static org.junit.Assert.fail;
+import static org.junit.Assert.*;
 import static org.mockito.Matchers.any;
-import static org.mockito.Matchers.eq;
-import static org.mockito.Mockito.doThrow;
-import static org.mockito.Mockito.inOrder;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
-import static org.mockito.Mockito.verifyZeroInteractions;
-import static org.mockito.Mockito.when;
-import static org.neo4j.kernel.impl.api.StatementOperationsTestHelper.mockedParts;
+import static org.mockito.Mockito.*;
 
 @SuppressWarnings("deprecation")
 public class TransactorTest
 {
+    private final AbstractTransactionManager txManager = mock( AbstractTransactionManager.class );
+    private final PersistenceManager pm = mock(PersistenceManager.class);
+    private final Statement statement = mock( Statement.class );
+    private final KernelTransaction kernelTransaction = mock( KernelTransaction.class );
+    @SuppressWarnings("unchecked")
+    private final Transactor.Work<Object, KernelException> work = mock( Transactor.Work.class );
+    private final Transactor transactor = new Transactor( txManager, pm );
+
     @Test
     public void shouldCommitSuccessfulStatement() throws Exception
     {
         // given
-        AbstractTransactionManager txManager = mock( AbstractTransactionManager.class );
-
-        Transaction existingTransaction = mock( Transaction.class );
+        javax.transaction.Transaction existingTransaction = mock( javax.transaction.Transaction.class );
         when( txManager.suspend() ).thenReturn( existingTransaction );
 
-        KernelTransaction txContext = mock( KernelTransaction.class );
-        when( txManager.getKernelTransaction() ).thenReturn( txContext );
+        when( pm.currentKernelTransaction() ).thenReturn( kernelTransaction );
+        when( kernelTransaction.acquireStatement() ).thenReturn( statement );
 
-        StatementOperationParts stmtContext = mockedParts( txContext );
-
-        @SuppressWarnings("unchecked")
-        Transactor.Statement<Object, KernelException> statement = mock( Transactor.Statement.class );
         Object expectedResult = new Object();
-        when( statement.perform( eq( stmtContext ), any( StatementState.class ) ) ).thenReturn( expectedResult );
-
-        Transactor transactor = new Transactor( txManager );
+        when( work.perform( statement ) ).thenReturn( expectedResult );
 
         // when
-        Object result = transactor.execute( statement );
+        Object result = transactor.execute( work );
 
         // then
         assertEquals( expectedResult, result );
-        InOrder order = inOrder( txManager, txContext, stmtContext.lifecycleOperations(), statement );
+        InOrder order = inOrder( txManager, pm, kernelTransaction );
         order.verify( txManager ).suspend();
         order.verify( txManager ).begin();
-        order.verify( txManager ).getKernelTransaction();
-        order.verify( txContext ).newStatementOperations();
-        order.verify( statement ).perform( eq( stmtContext ), any( StatementState.class ) );
-        order.verify( stmtContext.lifecycleOperations() ).close( any( StatementState.class ) );
-        order.verify( txContext ).commit();
+        order.verify( pm ).currentKernelTransaction();
+        order.verify( txManager ).commit();
         order.verify( txManager ).resume( existingTransaction );
         order.verifyNoMoreInteractions();
     }
@@ -92,28 +78,19 @@ public class TransactorTest
     public void shouldRollbackFailingStatement() throws Exception
     {
         // given
-        AbstractTransactionManager txManager = mock( AbstractTransactionManager.class );
-
-        Transaction existingTransaction = mock( Transaction.class );
+        javax.transaction.Transaction existingTransaction = mock( javax.transaction.Transaction.class );
         when( txManager.suspend() ).thenReturn( existingTransaction );
 
-        KernelTransaction txContext = mock( KernelTransaction.class );
-        when( txManager.getKernelTransaction() ).thenReturn( txContext );
+        when( pm.currentKernelTransaction()  ).thenReturn( kernelTransaction );
+        when( kernelTransaction.acquireStatement() ).thenReturn( statement );
 
-        StatementOperationParts stmtContext = mockedParts( txContext );
-        when( txContext.newStatementOperations() ).thenReturn( stmtContext );
-
-        @SuppressWarnings("unchecked")
-        Transactor.Statement<Object, KernelException> statement = mock( Transactor.Statement.class );
         SpecificKernelException exception = new SpecificKernelException();
-        when( statement.perform( any( StatementOperationParts.class ), any( StatementState.class ) ) ).thenThrow( exception );
-
-        Transactor transactor = new Transactor( txManager );
+        when( work.perform( any( KernelStatement.class ) ) ).thenThrow( exception );
 
         // when
         try
         {
-            transactor.execute( statement );
+            transactor.execute( work );
 
             fail( "expected exception" );
         }
@@ -122,14 +99,11 @@ public class TransactorTest
         {
             assertSame( exception, e );
         }
-        InOrder order = inOrder( txManager, txContext, stmtContext.lifecycleOperations(), statement );
+        InOrder order = inOrder( txManager, pm, kernelTransaction, work );
         order.verify( txManager ).suspend();
         order.verify( txManager ).begin();
-        order.verify( txManager ).getKernelTransaction();
-        order.verify( txContext ).newStatementOperations();
-        order.verify( statement ).perform( eq( stmtContext ), any( StatementState.class ) );
-        order.verify( stmtContext.lifecycleOperations() ).close( any( StatementState.class ) );
-        order.verify( txContext ).rollback();
+        order.verify( pm ).currentKernelTransaction();
+        order.verify( txManager ).rollback();
         order.verify( txManager ).resume( existingTransaction );
         order.verifyNoMoreInteractions();
     }
@@ -138,34 +112,25 @@ public class TransactorTest
     public void shouldNotResumeATransactionIfThereWasNoTransactionSuspended() throws Exception
     {
         // given
-        AbstractTransactionManager txManager = mock( AbstractTransactionManager.class );
+        when( txManager.suspend() ).thenReturn( null );
 
-        KernelTransaction txContext = mock( KernelTransaction.class );
-        when( txManager.getKernelTransaction() ).thenReturn( txContext );
+        when( pm.currentKernelTransaction()  ).thenReturn( kernelTransaction );
+        when( kernelTransaction.acquireStatement() ).thenReturn( statement );
 
-        StatementOperationParts stmtContext = mockedParts( txContext );
-        when( txContext.newStatementOperations() ).thenReturn( stmtContext );
-
-        @SuppressWarnings("unchecked")
-        Transactor.Statement<Object, KernelException> statement = mock( Transactor.Statement.class );
         Object expectedResult = new Object();
-        when( statement.perform( eq( stmtContext ), any( StatementState.class ) ) ).thenReturn( expectedResult );
-
-        Transactor transactor = new Transactor( txManager );
+        when( work.perform( statement ) ).thenReturn( expectedResult );
 
         // when
-        Object result = transactor.execute( statement );
+        Object result = transactor.execute( work );
 
         // then
         assertEquals( expectedResult, result );
-        InOrder order = inOrder( txManager, txContext, stmtContext.lifecycleOperations(), statement );
+        InOrder order = inOrder( txManager, pm, kernelTransaction, work );
         order.verify( txManager ).suspend();
         order.verify( txManager ).begin();
-        order.verify( txManager ).getKernelTransaction();
-        order.verify( txContext ).newStatementOperations();
-        order.verify( statement ).perform( eq( stmtContext ), any( StatementState.class ) );
-        order.verify( stmtContext.lifecycleOperations() ).close( any( StatementState.class ) );
-        order.verify( txContext ).commit();
+        order.verify( pm ).currentKernelTransaction();
+        order.verify( work ).perform( statement );
+        order.verify( txManager ).commit();
         order.verifyNoMoreInteractions();
     }
 
@@ -173,29 +138,23 @@ public class TransactorTest
     public void shouldPropagateNotSupportedExceptionFromBegin() throws Exception
     {
         // given
-        AbstractTransactionManager txManager = mock( AbstractTransactionManager.class );
-        when( txManager.suspend() ).thenReturn( mock( Transaction.class ) );
+        when( txManager.suspend() ).thenReturn( mock( javax.transaction.Transaction.class ) );
         NotSupportedException exception = new NotSupportedException();
         doThrow( exception ).when( txManager ).begin();
-
-        @SuppressWarnings("unchecked")
-        Transactor.Statement<Object, KernelException> statement = mock( Transactor.Statement.class );
-
-        Transactor transactor = new Transactor( txManager );
 
         // when
         try
         {
-            transactor.execute( statement );
+            transactor.execute( work );
 
             fail( "expected exception" );
         }
         // then
-        catch ( BeginTransactionFailureException e )
+        catch ( TransactionFailureException e )
         {
-            assertSame( exception, e.getCause() );
+            assertSame( exception, e.getCause().getCause() );
         }
-        verifyZeroInteractions( statement );
+        verifyZeroInteractions( work );
         verify( txManager ).suspend();
         verify( txManager ).begin();
         verifyNoMoreInteractions( txManager );
@@ -205,29 +164,23 @@ public class TransactorTest
     public void shouldPropagateSystemExceptionFromBegin() throws Exception
     {
         // given
-        AbstractTransactionManager txManager = mock( AbstractTransactionManager.class );
-        when( txManager.suspend() ).thenReturn( mock( Transaction.class ) );
+        when( txManager.suspend() ).thenReturn( mock( javax.transaction.Transaction.class ) );
         SystemException exception = new SystemException();
         doThrow( exception ).when( txManager ).begin();
-
-        @SuppressWarnings("unchecked")
-        Transactor.Statement<Object, KernelException> statement = mock( Transactor.Statement.class );
-
-        Transactor transactor = new Transactor( txManager );
 
         // when
         try
         {
-            transactor.execute( statement );
+            transactor.execute( work );
 
             fail( "expected exception" );
         }
         // then
-        catch ( BeginTransactionFailureException e )
+        catch ( TransactionFailureException e )
         {
-            assertSame( exception, e.getCause() );
+            assertSame( exception, e.getCause().getCause() );
         }
-        verifyZeroInteractions( statement );
+        verifyZeroInteractions( work );
         verify( txManager ).suspend();
         verify( txManager ).begin();
         verifyNoMoreInteractions( txManager );
@@ -237,19 +190,13 @@ public class TransactorTest
     public void shouldPropagateSystemExceptionFromSuspendTransaction() throws Exception
     {
         // given
-        AbstractTransactionManager txManager = mock( AbstractTransactionManager.class );
         SystemException exception = new SystemException();
         doThrow( exception ).when( txManager ).suspend();
-
-        @SuppressWarnings("unchecked")
-        Transactor.Statement<Object, KernelException> statement = mock( Transactor.Statement.class );
-
-        Transactor transactor = new Transactor( txManager );
 
         // when
         try
         {
-            transactor.execute( statement );
+            transactor.execute( work );
 
             fail( "expected exception" );
         }
@@ -258,7 +205,7 @@ public class TransactorTest
         {
             assertSame( exception, e.getCause() );
         }
-        verifyZeroInteractions( statement );
+        verifyZeroInteractions( work );
         verify( txManager ).suspend();
         verifyNoMoreInteractions( txManager );
     }
@@ -267,19 +214,13 @@ public class TransactorTest
     public void shouldPropagateSystemExceptionFromResumeTransaction() throws Exception
     {
         // given
-        AbstractTransactionManager txManager = mock( AbstractTransactionManager.class );
         SystemException exception = new SystemException();
         doThrow( exception ).when( txManager ).suspend();
-
-        @SuppressWarnings("unchecked")
-        Transactor.Statement<Object, KernelException> statement = mock( Transactor.Statement.class );
-
-        Transactor transactor = new Transactor( txManager );
 
         // when
         try
         {
-            transactor.execute( statement );
+            transactor.execute( work );
 
             fail( "expected exception" );
         }
@@ -288,7 +229,7 @@ public class TransactorTest
         {
             assertSame( exception, e.getCause() );
         }
-        verifyZeroInteractions( statement );
+        verifyZeroInteractions( work );
     }
 
     private static class SpecificKernelException extends KernelException

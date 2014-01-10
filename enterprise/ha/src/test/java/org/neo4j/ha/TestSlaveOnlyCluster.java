@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -58,6 +58,8 @@ public class TestSlaveOnlyCluster
         {
             clusterManager.start();
 
+            clusterManager.getDefaultCluster().await( ClusterManager.allSeesAllAsAvailable() );
+
             final CountDownLatch failedLatch = new CountDownLatch( 2 );
             final CountDownLatch electedLatch = new CountDownLatch( 2 );
             HeartbeatListener masterDownListener = new HeartbeatListener()
@@ -101,21 +103,18 @@ public class TestSlaveOnlyCluster
             electedLatch.await();
 
             HighlyAvailableGraphDatabase slaveDatabase = clusterManager.getDefaultCluster().getAnySlave(  );
-            Transaction tx = slaveDatabase.beginTx();
-            Node node = slaveDatabase.createNode();
-            node.setProperty( "foo", "bar" );
-            long nodeId = node.getId();
-            tx.success();
-            tx.finish();
+            long nodeId;
+            try ( Transaction tx = slaveDatabase.beginTx() )
+            {
+                Node node = slaveDatabase.createNode();
+                node.setProperty( "foo", "bar" );
+                nodeId = node.getId();
+                tx.success();
+            }
 
-            Transaction transaction = master.beginTx();
-            try
+            try ( Transaction ignore = master.beginTx() )
             {
                 assertThat( master.getNodeById( nodeId ).getProperty( "foo" ).toString(), equalTo( "bar" ) );
-            }
-            finally
-            {
-                transaction.finish();
             }
         }
         finally
@@ -135,6 +134,8 @@ public class TestSlaveOnlyCluster
         try
         {
             clusterManager.start();
+
+            clusterManager.getDefaultCluster().await( ClusterManager.allSeesAllAsAvailable() );
 
             HighlyAvailableGraphDatabase master = clusterManager.getDefaultCluster().getMaster();
             assertThat( clusterManager.getDefaultCluster().getServerId( master ), CoreMatchers.equalTo( 3 ) );

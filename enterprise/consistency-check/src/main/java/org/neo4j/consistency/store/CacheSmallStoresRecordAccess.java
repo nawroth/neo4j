@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -45,7 +45,7 @@ public class CacheSmallStoresRecordAccess extends DelegatingRecordAccess
     {
         if ( id < relationshipTypes.length )
         {
-            return new DirectRecordReference<RelationshipTypeTokenRecord>( relationshipTypes[id], this );
+            return new DirectRecordReference<>( relationshipTypes[id], this );
         }
         else
         {
@@ -58,7 +58,7 @@ public class CacheSmallStoresRecordAccess extends DelegatingRecordAccess
     {
         if ( id < propertyKeys.length )
         {
-            return new DirectRecordReference<PropertyKeyTokenRecord>( propertyKeys[id], this );
+            return new DirectRecordReference<>( propertyKeys[id], this );
         }
         else
         {
@@ -71,7 +71,7 @@ public class CacheSmallStoresRecordAccess extends DelegatingRecordAccess
     {
         if ( id < labels.length )
         {
-            return new DirectRecordReference<LabelTokenRecord>( labels[id], this );
+            return new DirectRecordReference<>( labels[id], this );
         }
         else
         {

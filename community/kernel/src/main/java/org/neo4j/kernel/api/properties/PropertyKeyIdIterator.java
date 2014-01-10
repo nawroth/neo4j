@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,13 +21,13 @@ package org.neo4j.kernel.api.properties;
 
 import java.util.Iterator;
 
-import org.neo4j.kernel.impl.api.PrimitiveLongIterator;
+import org.neo4j.kernel.impl.util.PrimitiveLongIterator;
 
 public class PropertyKeyIdIterator implements PrimitiveLongIterator
 {
-    private final Iterator<Property> properties;
+    private final Iterator<? extends Property> properties;
 
-    public PropertyKeyIdIterator( Iterator<Property> properties )
+    public PropertyKeyIdIterator( Iterator<? extends Property> properties )
     {
         this.properties = properties;
     }
@@ -41,6 +41,6 @@ public class PropertyKeyIdIterator implements PrimitiveLongIterator
     @Override
     public long next()
     {
-        return properties.next().propertyKeyId();
+        return properties.next().propertyKeyId;
     }
 }

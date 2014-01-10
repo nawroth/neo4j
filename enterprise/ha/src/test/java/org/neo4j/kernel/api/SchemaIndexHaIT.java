@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -27,8 +27,10 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.concurrent.ConcurrentHashMap;
 
-import org.junit.After;
+import org.junit.Rule;
 import org.junit.Test;
+
+import org.neo4j.graphdb.ConstraintViolationException;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
@@ -38,44 +40,49 @@ import org.neo4j.graphdb.factory.GraphDatabaseBuilder;
 import org.neo4j.graphdb.factory.HighlyAvailableGraphDatabaseFactory;
 import org.neo4j.graphdb.schema.IndexDefinition;
 import org.neo4j.graphdb.schema.Schema.IndexState;
+import org.neo4j.helpers.Predicate;
+import org.neo4j.helpers.Predicates;
+import org.neo4j.kernel.api.impl.index.DirectoryFactory;
+import org.neo4j.kernel.api.impl.index.LuceneSchemaIndexProvider;
 import org.neo4j.kernel.api.index.IndexAccessor;
 import org.neo4j.kernel.api.index.IndexConfiguration;
 import org.neo4j.kernel.api.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.index.IndexPopulator;
+import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.api.index.InternalIndexState;
 import org.neo4j.kernel.api.index.SchemaIndexProvider;
+import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.kernel.ha.HighlyAvailableGraphDatabase;
 import org.neo4j.kernel.ha.UpdatePuller;
-import org.neo4j.kernel.impl.api.index.inmemory.InMemoryIndexProvider;
+import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.test.DoubleLatch;
-import org.neo4j.test.TargetDirectory;
 import org.neo4j.test.ha.ClusterManager;
 import org.neo4j.test.ha.ClusterManager.ManagedCluster;
+import org.neo4j.test.ha.ClusterRule;
 
 import static java.util.concurrent.TimeUnit.SECONDS;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import static org.neo4j.cluster.ClusterSettings.default_timeout;
+
 import static org.neo4j.graphdb.DynamicLabel.label;
 import static org.neo4j.helpers.collection.IteratorUtil.asSet;
 import static org.neo4j.helpers.collection.IteratorUtil.asUniqueSet;
 import static org.neo4j.helpers.collection.IteratorUtil.single;
-import static org.neo4j.helpers.collection.MapUtil.stringMap;
-import static org.neo4j.kernel.ha.HaSettings.tx_push_factor;
-import static org.neo4j.kernel.impl.api.index.SchemaIndexTestHelper.singleInstanceSchemaIndexProviderFactory;
-import static org.neo4j.test.ha.ClusterManager.clusterOfSize;
+import static org.neo4j.kernel.impl.util.FileUtils.deleteRecursively;
+import static org.neo4j.test.ha.ClusterManager.allSeesAllAsAvailable;
 import static org.neo4j.test.ha.ClusterManager.masterAvailable;
 
 public class SchemaIndexHaIT
 {
+
     @Test
     public void creatingIndexOnMasterShouldHaveSlavesBuildItAsWell() throws Throwable
     {
         // GIVEN
-        ManagedCluster cluster = startCluster( clusterOfSize( 3 ) );
+        ManagedCluster cluster = clusterRule.startCluster();
         HighlyAvailableGraphDatabase master = cluster.getMaster();
         Map<Object, Node> data = createSomeData( master );
 
@@ -88,21 +95,22 @@ public class SchemaIndexHaIT
     }
     
     @Test
-    public void creatingIndexOnSlaveShouldHaveOtherSlavesAndMasterBuiltItAsWell() throws Throwable
+    public void creatingIndexOnSlaveIsNotAllowed() throws Throwable
     {
         // GIVEN
-        ManagedCluster cluster = startCluster( clusterOfSize( 3 ) );
-        HighlyAvailableGraphDatabase master = cluster.getMaster();
-        Map<Object, Node> data = createSomeData( master );
-        cluster.sync();
+        ManagedCluster cluster = clusterRule.startCluster();
         HighlyAvailableGraphDatabase slave = cluster.getAnySlave();
 
         // WHEN
-        IndexDefinition index = createIndex( slave );
-        cluster.sync();
-
-        // THEN
-        awaitIndexOnline( index, cluster, data );
+        try
+        {
+            createIndex( slave );
+            fail( "should have thrown exception" );
+        }
+        catch ( ConstraintViolationException e )
+        {
+            // expected
+        }
     }
     
     @Test
@@ -110,7 +118,7 @@ public class SchemaIndexHaIT
     {
         // GIVEN a cluster of 3
         ControlledGraphDatabaseFactory dbFactory = new ControlledGraphDatabaseFactory();
-        ManagedCluster cluster = startCluster( clusterOfSize( 3 ), dbFactory );
+        ManagedCluster cluster = clusterRule.startCluster( dbFactory );
         HighlyAvailableGraphDatabase firstMaster = cluster.getMaster();
 
         // where the master gets some data created as well as an index
@@ -136,54 +144,183 @@ public class SchemaIndexHaIT
         
         // THEN
         assertEquals( "Unexpected new master", aSlave, newMaster );
-        Transaction transaction = newMaster.beginTx();
-        IndexDefinition index;
+        try ( Transaction tx = newMaster.beginTx() )
+        {
+            IndexDefinition index = single( newMaster.schema().getIndexes() );
+            awaitIndexOnline( index, newMaster, data );
+            tx.success();
+        }
+        // FINALLY: let all db's finish
+        for ( HighlyAvailableGraphDatabase db : cluster.getAllMembers() )
+        {
+            dbFactory.triggerFinish( db );
+        }
+    }
+
+    @Test
+    public void populatingSchemaIndicesOnMasterShouldBeBroughtOnlineOnSlavesAfterStoreCopy() throws Throwable
+    {
+        /*
+        The master has an index that is currently populating.
+        Then a slave comes online and contacts the master to get copies of the store files.
+        Because the index is still populating, it won't be copied. Instead the slave will build its own.
+        We want to observe that the slave builds an index that eventually comes online.
+         */
+
+        // GIVEN
+        ControlledGraphDatabaseFactory dbFactory = new ControlledGraphDatabaseFactory( IS_MASTER );
+
+        ManagedCluster cluster = clusterRule.startCluster( dbFactory );
+
         try
         {
-            index = single( newMaster.schema().getIndexes() );
+            cluster.await( allSeesAllAsAvailable() );
+
+            HighlyAvailableGraphDatabase slave = cluster.getAnySlave();
+
+            // A slave is offline, and has no store files
+            ClusterManager.RepairKit slaveDown = bringSlaveOfflineAndRemoveStoreFiles( cluster, slave );
+
+            // And I create an index on the master, and wait for population to start
+            HighlyAvailableGraphDatabase master = cluster.getMaster();
+            Map<Object, Node> data = createSomeData(master);
+            createIndex( master );
+            dbFactory.awaitPopulationStarted( master );
+
+
+            // WHEN the slave comes online before population has finished on the master
+            slave = slaveDown.repair();
+            cluster.await( allSeesAllAsAvailable(), 180 );
+            cluster.sync();
+
+
+            // THEN, population should finish successfully on both master and slave
+            dbFactory.triggerFinish( master );
+
+            // Check master
+            IndexDefinition index;
+            try ( Transaction tx = master.beginTx())
+            {
+                index = single( master.schema().getIndexes() );
+                awaitIndexOnline( index, master, data );
+                tx.success();
+            }
+
+            // Check slave
+            try ( Transaction tx = slave.beginTx() )
+            {
+                awaitIndexOnline( index, slave, data );
+                tx.success();
+            }
         }
         finally
         {
-            transaction.finish();
+            for ( HighlyAvailableGraphDatabase db : cluster.getAllMembers() )
+            {
+                dbFactory.triggerFinish( db );
+            }
         }
-        awaitIndexOnline( index, newMaster, data );
     }
 
-    private final File storeDir = TargetDirectory.forTest( getClass() ).graphDbDir( true );
-    private ClusterManager clusterManager;
+    @Test
+    public void onlineSchemaIndicesOnMasterShouldBeBroughtOnlineOnSlavesAfterStoreCopy() throws Throwable
+    {
+        /*
+        The master has an index that is online.
+        Then a slave comes online and contacts the master to get copies of the store files.
+        Because the index is online, it should be copied, and the slave should successfully bring the index online.
+         */
+
+        // GIVEN
+        ControlledGraphDatabaseFactory dbFactory = new ControlledGraphDatabaseFactory();
+
+        ManagedCluster cluster = clusterRule.startCluster( dbFactory );
+        cluster.await( allSeesAllAsAvailable(), 120 );
+
+        HighlyAvailableGraphDatabase slave = cluster.getAnySlave();
+
+        // All slaves in the cluster, except the one I care about, proceed as normal
+        proceedAsNormalWithIndexPopulationOnAllSlavesExcept( dbFactory, cluster, slave );
+
+        // A slave is offline, and has no store files
+        ClusterManager.RepairKit slaveDown = bringSlaveOfflineAndRemoveStoreFiles( cluster, slave );
+
+        // And I create an index on the master, and wait for population to start
+        HighlyAvailableGraphDatabase master = cluster.getMaster();
+        Map<Object, Node> data = createSomeData(master);
+        createIndex( master );
+        dbFactory.awaitPopulationStarted( master );
+
+        // And the population finishes
+        dbFactory.triggerFinish( master );
+        IndexDefinition index;
+        try ( Transaction tx = master.beginTx())
+        {
+            index = single( master.schema().getIndexes() );
+            awaitIndexOnline( index, master, data );
+            tx.success();
+        }
+
+
+        // WHEN the slave comes online after population has finished on the master
+        slave = slaveDown.repair();
+        cluster.await( allSeesAllAsAvailable() );
+        cluster.sync();
+
+
+        // THEN the index should work on the slave
+        dbFactory.triggerFinish( slave );
+        try ( Transaction tx = slave.beginTx() )
+        {
+            awaitIndexOnline( index, slave, data );
+            tx.success();
+        }
+    }
+
+    private void proceedAsNormalWithIndexPopulationOnAllSlavesExcept( ControlledGraphDatabaseFactory dbFactory,
+                                                                      ManagedCluster cluster,
+                                                                      HighlyAvailableGraphDatabase slaveToIgnore )
+    {
+        for ( HighlyAvailableGraphDatabase db : cluster.getAllMembers() )
+        {
+            if( db != slaveToIgnore && db.getInstanceState().equals( "SLAVE" ) )
+            {
+                dbFactory.triggerFinish( db );
+            }
+        }
+    }
+
+    @SuppressWarnings("ResultOfMethodCallIgnored")
+    private ClusterManager.RepairKit bringSlaveOfflineAndRemoveStoreFiles( ManagedCluster cluster, HighlyAvailableGraphDatabase slave ) throws IOException
+    {
+        ClusterManager.RepairKit slaveDown = cluster.shutdown(slave);
+
+        File storeDir = new File( slave.getStoreDir() );
+        deleteRecursively( storeDir );
+        storeDir.mkdir();
+        return slaveDown;
+    }
+
+    public static final Predicate<GraphDatabaseService> IS_MASTER = new Predicate<GraphDatabaseService>()
+    {
+        @Override
+        public boolean accept( GraphDatabaseService item )
+        {
+            return item instanceof HighlyAvailableGraphDatabase && ((HighlyAvailableGraphDatabase) item).isMaster();
+        }
+    };
+
+    @Rule
+    public ClusterRule clusterRule = new ClusterRule( getClass() );
+
     private final String key = "key";
     private final Label label = label( "label" );
-    
-    private ManagedCluster startCluster( ClusterManager.Provider provider ) throws Throwable
-    {
-        return startCluster( provider, new HighlyAvailableGraphDatabaseFactory() );
-    }
-
-    private ManagedCluster startCluster( ClusterManager.Provider provider,
-            HighlyAvailableGraphDatabaseFactory dbFactory ) throws Throwable
-    {
-        clusterManager = new ClusterManager( provider, storeDir, stringMap(
-                default_timeout.name(), "1s", tx_push_factor.name(), "0" ),
-                new HashMap<Integer, Map<String,String>>(), dbFactory );
-        clusterManager.start();
-        ManagedCluster cluster = clusterManager.getDefaultCluster();
-        cluster.await( masterAvailable() );
-        return cluster;
-    }
-    
-    @After
-    public void after() throws Throwable
-    {
-        if ( clusterManager != null )
-            clusterManager.stop();
-    }
 
     private Map<Object, Node> createSomeData( GraphDatabaseService db )
     {
-        Map<Object, Node> result = new HashMap<Object, Node>();
-        Transaction tx = db.beginTx();
-        try
+        try ( Transaction tx = db.beginTx() )
         {
+            Map<Object, Node> result = new HashMap<>();
             for ( int i = 0; i < 10; i++ )
             {
                 Node node = db.createNode( label );
@@ -194,26 +331,25 @@ public class SchemaIndexHaIT
             tx.success();
             return result;
         }
-        finally
-        {
-            tx.finish();
-        }
     }
 
     private IndexDefinition createIndex( GraphDatabaseService db )
     {
-        Transaction tx = db.beginTx();
-        IndexDefinition index = db.schema().indexFor( label ).on( key ).create();
-        tx.success();
-        tx.finish();
-        return index;
+        try ( Transaction tx = db.beginTx() )
+        {
+            IndexDefinition index = db.schema().indexFor( label ).on( key ).create();
+            tx.success();
+            return index;
+        }
     }
 
     private static void awaitIndexOnline( IndexDefinition index, ManagedCluster cluster,
             Map<Object, Node> expectedDdata ) throws InterruptedException
     {
         for ( GraphDatabaseService db : cluster.getAllMembers() )
+        {
             awaitIndexOnline( index, db, expectedDdata );
+        }
     }
 
     private static IndexDefinition reHomedIndexDefinition( GraphDatabaseService db, IndexDefinition definition )
@@ -231,12 +367,11 @@ public class SchemaIndexHaIT
     private static void awaitIndexOnline( IndexDefinition requestedIndex, GraphDatabaseService db,
             Map<Object, Node> expectedData ) throws InterruptedException
     {
-        Transaction transaction = db.beginTx();
-        try
+        try ( Transaction tx = db.beginTx() )
         {
             IndexDefinition index = reHomedIndexDefinition( db, requestedIndex );
 
-            long timeout = System.currentTimeMillis() + SECONDS.toMillis( 60 );
+            long timeout = System.currentTimeMillis() + SECONDS.toMillis( 120 );
             while( !indexOnline( index, db ) )
             {
                 Thread.sleep( 1 );
@@ -247,10 +382,7 @@ public class SchemaIndexHaIT
             }
 
             assertIndexContents( index, db, expectedData );
-        }
-        finally
-        {
-            transaction.finish();
+            tx.success();
         }
     }
 
@@ -277,30 +409,60 @@ public class SchemaIndexHaIT
         }
     }
     
-    private static class ControlledIndexPopulator extends IndexPopulator.Adapter
+    private static class ControlledIndexPopulator implements IndexPopulator
     {
         private final DoubleLatch latch;
-        private final IndexPopulator inMemoryDelegate;
+        private final IndexPopulator delegate;
 
-        public ControlledIndexPopulator( IndexPopulator inMemoryDelegate, DoubleLatch latch )
+        public ControlledIndexPopulator( IndexPopulator delegate, DoubleLatch latch )
         {
-            this.inMemoryDelegate = inMemoryDelegate;
+            this.delegate = delegate;
             this.latch = latch;
+        }
+
+        @Override
+        public void create() throws IOException
+        {
+            delegate.create();
+        }
+
+        @Override
+        public void drop() throws IOException
+        {
+            delegate.drop();
         }
 
         @Override
         public void add( long nodeId, Object propertyValue ) throws IndexEntryConflictException, IOException
         {
-            inMemoryDelegate.add( nodeId, propertyValue );
+            delegate.add(nodeId, propertyValue);
             latch.startAndAwaitFinish();
         }
-        
+
+        @Override
+        public void verifyDeferredConstraints() throws IndexEntryConflictException, IOException
+        {
+            delegate.verifyDeferredConstraints();
+        }
+
+        @Override
+        public IndexUpdater newPopulatingUpdater() throws IOException
+        {
+            return delegate.newPopulatingUpdater();
+        }
+
         @Override
         public void close( boolean populationCompletedSuccessfully ) throws IOException
         {
-            inMemoryDelegate.close( populationCompletedSuccessfully );
-            assertTrue( populationCompletedSuccessfully );
+            delegate.close(populationCompletedSuccessfully);
+            assertTrue( "Expected population to succeed :(", populationCompletedSuccessfully );
             latch.finish();
+        }
+
+        @Override
+        public void markAsFailed( String failure ) throws IOException
+        {
+            delegate.markAsFailed( failure );
         }
     }
 
@@ -310,80 +472,109 @@ public class SchemaIndexHaIT
 
     private static class ControlledSchemaIndexProvider extends SchemaIndexProvider
     {
-        private final SchemaIndexProvider inMemoryDelegate = new InMemoryIndexProvider();
+        private final SchemaIndexProvider delegate;
         private final DoubleLatch latch = new DoubleLatch();
         
-        public ControlledSchemaIndexProvider()
+        public ControlledSchemaIndexProvider(SchemaIndexProvider delegate)
         {
-            super( CONTROLLED_PROVIDER_DESCRIPTOR, 10 );
+            super( CONTROLLED_PROVIDER_DESCRIPTOR, 100 /*we want it to always win*/ );
+            this.delegate = delegate;
         }
         
         @Override
         public IndexPopulator getPopulator( long indexId, IndexConfiguration config )
         {
-            return new ControlledIndexPopulator( inMemoryDelegate.getPopulator( indexId, config ), latch );
+            return new ControlledIndexPopulator( delegate.getPopulator( indexId, config ), latch );
         }
 
         @Override
         public IndexAccessor getOnlineAccessor( long indexId, IndexConfiguration config ) throws IOException
         {
-            return inMemoryDelegate.getOnlineAccessor( indexId, config );
+            return delegate.getOnlineAccessor(indexId, config);
         }
 
         @Override
         public InternalIndexState getInitialState( long indexId )
         {
-            return inMemoryDelegate.getInitialState( indexId );
+            return delegate.getInitialState(indexId);
         }
 
         @Override
         public String getPopulationFailure( long indexId ) throws IllegalStateException
         {
-            return inMemoryDelegate.getPopulationFailure( indexId );
+            return delegate.getPopulationFailure( indexId );
+        }
+    }
+
+    interface IndexProviderDependencies
+    {
+        GraphDatabaseService db();
+        Config config();
+    }
+
+    public static class ControllingIndexProviderFactory extends KernelExtensionFactory<IndexProviderDependencies>
+    {
+
+        private final Map<GraphDatabaseService, SchemaIndexProvider> perDbIndexProvider;
+        private final Predicate<GraphDatabaseService> injectLatchPredicate;
+
+        public ControllingIndexProviderFactory( Map<GraphDatabaseService, SchemaIndexProvider> perDbIndexProvider,
+                                                Predicate<GraphDatabaseService> injectLatchPredicate)
+        {
+            super( CONTROLLED_PROVIDER_DESCRIPTOR.getKey() );
+            this.perDbIndexProvider = perDbIndexProvider;
+            this.injectLatchPredicate = injectLatchPredicate;
+        }
+
+        @Override
+        public Lifecycle newKernelExtension( SchemaIndexHaIT.IndexProviderDependencies deps ) throws Throwable
+        {
+            if(injectLatchPredicate.accept( deps.db() ))
+            {
+                ControlledSchemaIndexProvider provider = new ControlledSchemaIndexProvider(
+                        new LuceneSchemaIndexProvider( DirectoryFactory.PERSISTENT, deps.config() ) );
+                perDbIndexProvider.put( deps.db(), provider );
+                return provider;
+            }
+            else
+            {
+                return new LuceneSchemaIndexProvider( DirectoryFactory.PERSISTENT, deps.config() );
+            }
         }
     }
 
     private static class ControlledGraphDatabaseFactory extends HighlyAvailableGraphDatabaseFactory
     {
-        final Map<GraphDatabaseService,ControlledSchemaIndexProvider> perDbIndexProvider =
-                new ConcurrentHashMap<GraphDatabaseService,ControlledSchemaIndexProvider>();
-        
-        @Override
-        public GraphDatabaseBuilder newHighlyAvailableDatabaseBuilder( String path )
+        final Map<GraphDatabaseService,SchemaIndexProvider> perDbIndexProvider = new ConcurrentHashMap<>();
+        private final KernelExtensionFactory<?> factory;
+
+        public ControlledGraphDatabaseFactory()
         {
-            ControlledSchemaIndexProvider provider = new ControlledSchemaIndexProvider();
-            KernelExtensionFactory<?> factory = singleInstanceSchemaIndexProviderFactory( "controlled", provider );
-            getCurrentState().setKernelExtensions( Arrays.<KernelExtensionFactory<?>>asList( factory ) );
-            return dbReferenceCapturingBuilder( perDbIndexProvider, provider,
-                    super.newHighlyAvailableDatabaseBuilder( path ) );
+            factory = new ControllingIndexProviderFactory(perDbIndexProvider, Predicates.<GraphDatabaseService>TRUE());
+        }
+
+        private ControlledGraphDatabaseFactory( Predicate<GraphDatabaseService> dbsToControlIndexingOn )
+        {
+            factory = new ControllingIndexProviderFactory(perDbIndexProvider, dbsToControlIndexingOn);
+        }
+
+        @Override
+        public GraphDatabaseBuilder newHighlyAvailableDatabaseBuilder(String path)
+        {
+            getCurrentState().addKernelExtensions( Arrays.<KernelExtensionFactory<?>>asList( factory ) );
+            return super.newHighlyAvailableDatabaseBuilder( path );
         }
         
         void awaitPopulationStarted( GraphDatabaseService db )
         {
-            DoubleLatch latch = perDbIndexProvider.get( db ).latch;
-            latch.awaitStart();
+            ControlledSchemaIndexProvider provider = (ControlledSchemaIndexProvider) perDbIndexProvider.get( db );
+            if(provider != null ) provider.latch.awaitStart();
         }
 
         void triggerFinish( GraphDatabaseService db )
         {
-            ControlledSchemaIndexProvider provider = perDbIndexProvider.get( db );
-            provider.latch.finish();
+            ControlledSchemaIndexProvider provider = (ControlledSchemaIndexProvider) perDbIndexProvider.get( db );
+            if(provider != null ) provider.latch.finish();
         }
-    }
-    
-    protected static GraphDatabaseBuilder dbReferenceCapturingBuilder(
-            final Map<GraphDatabaseService, ControlledSchemaIndexProvider> perDbIndexProvider,
-            final ControlledSchemaIndexProvider provider, GraphDatabaseBuilder actual )
-    {
-        return new GraphDatabaseBuilder.Delegator( actual )
-        {
-            @Override
-            public GraphDatabaseService newGraphDatabase()
-            {
-                GraphDatabaseService db = super.newGraphDatabase();
-                perDbIndexProvider.put( db, provider );
-                return db;
-            }
-        };
     }
  }

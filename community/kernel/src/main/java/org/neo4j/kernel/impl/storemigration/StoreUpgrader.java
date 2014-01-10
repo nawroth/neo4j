@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -149,6 +149,38 @@ public class StoreUpgrader
         public UnableToUpgradeException( String message )
         {
             super( message );
+        }
+    }
+
+    public static class UpgradeMissingStoreFilesException extends UnableToUpgradeException
+    {
+        private static final String MESSAGE = "Missing required store file '%s'.";
+
+        public UpgradeMissingStoreFilesException( String filenameExpectedToExist )
+        {
+            super( String.format( MESSAGE, filenameExpectedToExist ) );
+        }
+    }
+
+    public static class UpgradingStoreVersionNotFoundException extends UnableToUpgradeException
+    {
+        private static final String MESSAGE =
+                "'%s' does not contain a store version, please ensure that the original database was shut down in a clean state.";
+
+        public UpgradingStoreVersionNotFoundException( String filenameWithoutStoreVersion )
+        {
+            super( String.format( MESSAGE, filenameWithoutStoreVersion ) );
+        }
+    }
+
+    public static class UnexpectedUpgradingStoreVersionException extends UnableToUpgradeException
+    {
+        private static final String MESSAGE =
+                "'%s' has a store version number that we cannot upgrade from. Expected '%s' but file is version '%s'.";
+
+        public UnexpectedUpgradingStoreVersionException( String filename, String expectedVersion, String actualVersion )
+        {
+            super( String.format( MESSAGE, filename, expectedVersion, actualVersion ) );
         }
     }
 }

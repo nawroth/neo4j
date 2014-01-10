@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -40,7 +40,9 @@ import org.neo4j.test.TargetDirectory;
 
 import static java.lang.Integer.parseInt;
 import static java.lang.System.exit;
+
 import static org.junit.Assert.assertEquals;
+
 import static org.neo4j.test.LogTestUtils.EVERYTHING_BUT_DONE_RECORDS;
 import static org.neo4j.test.LogTestUtils.filterNeostoreLogicalLog;
 import static org.neo4j.test.LogTestUtils.filterTxLog;
@@ -62,30 +64,20 @@ public class CreateTransactionsAndDie
 
     private static void create1pcTx( GraphDatabaseService db )
     {
-        Transaction tx = db.beginTx();
-        try
+        try(Transaction tx = db.beginTx())
         {
             db.createNode();
             tx.success();
-        }
-        finally
-        {
-            tx.finish();
         }
     }
 
     private static void create2pcTx( GraphDatabaseService db )
     {
-        Transaction tx = db.beginTx();
-        try
+        try(Transaction tx = db.beginTx())
         {
             Node node = db.createNode();
             db.index().forNodes( "index" ).add( node, "key", "value" );
             tx.success();
-        }
-        finally
-        {
-            tx.finish();
         }
     }
     

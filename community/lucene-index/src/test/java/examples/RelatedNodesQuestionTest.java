@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -43,8 +43,7 @@ public class RelatedNodesQuestionTest
     public void question5346011()
     {
         GraphDatabaseService service = new TestGraphDatabaseFactory().newImpermanentDatabase();
-        Transaction transaction = service.beginTx();
-        try
+        try ( Transaction tx = service.beginTx() )
         {
             RelationshipIndex index = service.index().forRelationships( "exact" );
             // ...creation of the nodes and relationship
@@ -56,11 +55,7 @@ public class RelatedNodesQuestionTest
             // query
             IndexHits<Relationship> hits = index.get( "uuid", a_uuid, node1, node2 );
             assertEquals( 1, hits.size() );
-            transaction.success();
-        }
-        finally
-        {
-            transaction.finish();
+            tx.success();
         }
         service.shutdown();
     }

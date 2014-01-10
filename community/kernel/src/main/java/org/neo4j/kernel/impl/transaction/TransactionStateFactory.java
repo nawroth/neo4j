@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -32,7 +32,7 @@ public class TransactionStateFactory
     protected LockManager lockManager;
     protected NodeManager nodeManager;
     protected final Logging logging;
-    protected TxHook txHook;
+    protected RemoteTxHook txHook;
     protected TxIdGenerator txIdGenerator;
     
     public TransactionStateFactory( Logging logging )
@@ -41,7 +41,7 @@ public class TransactionStateFactory
     }
     
     public void setDependencies( LockManager lockManager,
-            NodeManager nodeManager, TxHook txHook, TxIdGenerator txIdGenerator )
+            NodeManager nodeManager, RemoteTxHook txHook, TxIdGenerator txIdGenerator )
     {
         this.lockManager = lockManager;
         this.nodeManager = nodeManager;

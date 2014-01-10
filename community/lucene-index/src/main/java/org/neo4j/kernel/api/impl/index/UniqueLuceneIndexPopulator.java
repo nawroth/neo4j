@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -31,10 +31,15 @@ import org.apache.lucene.search.SearcherManager;
 import org.apache.lucene.search.TopDocs;
 
 import org.neo4j.kernel.api.index.IndexEntryConflictException;
+import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.api.index.NodePropertyUpdate;
 import org.neo4j.kernel.api.index.PreexistingIndexEntryConflictException;
 import org.neo4j.kernel.api.index.util.FailureStorage;
 
+/**
+ * @deprecated Use {@link DeferredConstraintVerificationUniqueLuceneIndexPopulator} instead.
+ */
+@Deprecated
 class UniqueLuceneIndexPopulator extends LuceneIndexPopulator
 {
     static final int DEFAULT_BATCH_SIZE = 1024;
@@ -54,7 +59,7 @@ class UniqueLuceneIndexPopulator extends LuceneIndexPopulator
 
     private HashMap<Object, Long> newBatchMap()
     {
-        return new HashMap<Object, Long>( (int) (batchSize / LOAD_FACTOR), LOAD_FACTOR );
+        return new HashMap<>( (int) (batchSize / LOAD_FACTOR), LOAD_FACTOR );
     }
 
     @Override
@@ -107,7 +112,7 @@ class UniqueLuceneIndexPopulator extends LuceneIndexPopulator
         else
         {
             currentBatch.put( propertyValue, nodeId );
-            writer.addDocument( documentStructure.newDocument( nodeId, propertyValue ) );
+            writer.addDocument( documentStructure.newDocumentRepresentingProperty( nodeId, propertyValue ) );
             if ( currentBatch.size() >= batchSize )
             {
                 startNewBatch();
@@ -115,18 +120,39 @@ class UniqueLuceneIndexPopulator extends LuceneIndexPopulator
         }
     }
 
+    @Override
+    public void verifyDeferredConstraints() throws IndexEntryConflictException, IOException
+    {
+        // constraints are checked in add() so do nothing
+    }
+
+    @Override
+    public IndexUpdater newPopulatingUpdater() throws IOException
+    {
+        return new IndexUpdater()
+        {
+            @Override
+            public void process( NodePropertyUpdate update ) throws IOException, IndexEntryConflictException
+            {
+                add( update.getNodeId(), update.getValueAfter() );
+            }
+
+            @Override
+            public void close() throws IOException, IndexEntryConflictException
+            {
+            }
+
+            @Override
+            public void remove( Iterable<Long> nodeIds )
+            {
+                throw new UnsupportedOperationException( "should not remove() from populating index" );
+            }
+        };
+    }
+
     private void startNewBatch() throws IOException
     {
         searcherManager.maybeRefresh();
         currentBatch = newBatchMap();
-    }
-
-    @Override
-    public void update( Iterable<NodePropertyUpdate> updates ) throws IndexEntryConflictException, IOException
-    {
-        for ( NodePropertyUpdate update : updates )
-        {
-            add( update.getNodeId(), update.getValueAfter() );
-        }
     }
 }

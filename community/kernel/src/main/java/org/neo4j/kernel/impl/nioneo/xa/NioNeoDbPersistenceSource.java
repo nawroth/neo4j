@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,24 +19,23 @@
  */
 package org.neo4j.kernel.impl.nioneo.xa;
 
-import org.neo4j.kernel.impl.core.ReadOnlyDbException;
 import org.neo4j.kernel.impl.persistence.EntityIdGenerator;
 import org.neo4j.kernel.impl.persistence.NeoStoreTransaction;
 import org.neo4j.kernel.impl.persistence.PersistenceSource;
 import org.neo4j.kernel.impl.transaction.XaDataSourceManager;
 import org.neo4j.kernel.impl.transaction.xaframework.XaConnection;
 import org.neo4j.kernel.impl.transaction.xaframework.XaDataSource;
-import org.neo4j.kernel.lifecycle.Lifecycle;
+import org.neo4j.kernel.lifecycle.LifecycleAdapter;
 
 /**
  * The NioNeo persistence source implementation. If this class is registered as
  * persistence source for Neo4j kernel operations that are performed on the graph
  * will be forwarded to this class {@link NeoStoreTransaction} implementation.
  */
-public class NioNeoDbPersistenceSource implements PersistenceSource, EntityIdGenerator, Lifecycle
+public class NioNeoDbPersistenceSource extends LifecycleAdapter implements PersistenceSource, EntityIdGenerator
 {
-    private String dataSourceName = null;
-    private XaDataSourceManager xaDataSourceManager;
+    private final String dataSourceName = null;
+    private final XaDataSourceManager xaDataSourceManager;
 
     public NioNeoDbPersistenceSource(XaDataSourceManager xaDataSourceManager)
     {
@@ -45,32 +44,8 @@ public class NioNeoDbPersistenceSource implements PersistenceSource, EntityIdGen
     }
 
     @Override
-    public void init()
-    {
-    }
-
-    @Override
-    public void start()
-    {
-    }
-
-    @Override
-    public void stop()
-    {
-
-    }
-
-    @Override
-    public void shutdown()
-    {
-    }
-
     public NeoStoreTransaction createTransaction( XaConnection connection )
     {
-        if (  xaDataSourceManager.getNeoStoreDataSource().isReadOnly() )
-        {
-            throw new ReadOnlyDbException();
-        }
         NeoStoreTransaction result = ((NeoStoreXaConnection) connection).getWriteTransaction();
         
         // This is not a very good solution. The XaConnection is only used when
@@ -80,34 +55,33 @@ public class NioNeoDbPersistenceSource implements PersistenceSource, EntityIdGen
         return result;
     }
 
-    public NeoStoreTransaction createReadOnlyResourceConnection()
-    {
-        return new ReadTransaction( xaDataSourceManager.getNeoStoreDataSource().getNeoStore() );
-    }
-
+    @Override
     public String toString()
     {
         return "A persistence source to [" + dataSourceName + "]";
     }
 
+    @Override
     public long nextId( Class<?> clazz )
     {
         return  xaDataSourceManager.getNeoStoreDataSource().nextId( clazz );
     }
 
+    @Override
     public long getHighestPossibleIdInUse( Class<?> clazz )
     {
         return  xaDataSourceManager.getNeoStoreDataSource().getHighestPossibleIdInUse( clazz );
     }
 
+    @Override
     public long getNumberOfIdsInUse( Class<?> clazz )
     {
         return  xaDataSourceManager.getNeoStoreDataSource().getNumberOfIdsInUse( clazz );
     }
     
+    @Override
     public XaDataSource getXaDataSource()
     {
         return  xaDataSourceManager.getNeoStoreDataSource();
     }
-
 }

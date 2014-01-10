@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -23,27 +23,23 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Comparator;
-import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Set;
 
 import org.neo4j.graphdb.Direction;
-import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.NotFoundException;
 import org.neo4j.graphdb.PropertyContainer;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.helpers.Triplet;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
-import org.neo4j.kernel.api.operations.StatementState;
+import org.neo4j.kernel.api.properties.DefinedProperty;
 import org.neo4j.kernel.api.properties.Property;
-import org.neo4j.kernel.impl.api.CacheLoader;
-import org.neo4j.kernel.impl.cache.SizeOfs;
+import org.neo4j.kernel.impl.api.KernelStatement;
+import org.neo4j.kernel.impl.api.store.CacheLoader;
 import org.neo4j.kernel.impl.core.WritableTransactionState.CowEntityElement;
 import org.neo4j.kernel.impl.core.WritableTransactionState.PrimitiveElement;
 import org.neo4j.kernel.impl.nioneo.store.InvalidRecordException;
-import org.neo4j.kernel.impl.nioneo.store.PropertyData;
 import org.neo4j.kernel.impl.nioneo.store.Record;
 import org.neo4j.kernel.impl.util.ArrayMap;
 import org.neo4j.kernel.impl.util.CombinedRelIdIterator;
@@ -52,7 +48,10 @@ import org.neo4j.kernel.impl.util.RelIdArray.DirectionWrapper;
 import org.neo4j.kernel.impl.util.RelIdIterator;
 
 import static java.lang.System.arraycopy;
+import static java.util.Arrays.binarySearch;
 
+import static org.neo4j.kernel.impl.cache.SizeOfs.REFERENCE_SIZE;
+import static org.neo4j.kernel.impl.cache.SizeOfs.sizeOfArray;
 import static org.neo4j.kernel.impl.cache.SizeOfs.withArrayOverheadIncludingReferences;
 import static org.neo4j.kernel.impl.util.RelIdArray.empty;
 import static org.neo4j.kernel.impl.util.RelIdArray.wrap;
@@ -66,12 +65,14 @@ import static org.neo4j.kernel.impl.util.RelIdArray.wrap;
  */
 public class NodeImpl extends ArrayBasedPrimitive
 {
+    /* relationships[] being null means: not even tried to load any relationships - go ahead and load
+     * relationships[] being NO_RELATIONSHIPS means: don't bother loading relationships since there aren't any */
     private static final RelIdArray[] NO_RELATIONSHIPS = new RelIdArray[0];
 
     private volatile RelIdArray[] relationships;
 
-    // TODO do this more efficiently, perhaps using a sorted array
-    private volatile Set<Long> labels;
+    // Sorted array
+    private volatile int[] labels;
     /*
      * This is the id of the next relationship to load from disk.
      */
@@ -96,17 +97,11 @@ public class NodeImpl extends ArrayBasedPrimitive
             relationships = NO_RELATIONSHIPS;
         }
     }
-    
+
     @Override
-    protected ArrayMap<Integer, PropertyData> loadProperties( NodeManager nodeManager )
+    protected Iterator<DefinedProperty> loadProperties( NodeManager nodeManager )
     {
         return nodeManager.loadProperties( this, false );
-    }
-    
-    @Override
-    protected Object loadPropertyValue( NodeManager nodeManager, int propertyKey )
-    {
-        return nodeManager.nodeLoadPropertyValue( id, propertyKey );
     }
 
     @Override
@@ -118,14 +113,21 @@ public class NodeImpl extends ArrayBasedPrimitive
     @Override
     public int sizeOfObjectInBytesIncludingOverhead()
     {
-        int size = super.sizeOfObjectInBytesIncludingOverhead() + SizeOfs.REFERENCE_SIZE/*relationships reference*/ + 8/*relChainPosition*/ + 8/*id*/;
-        if ( relationships != null )
+        int size = super.sizeOfObjectInBytesIncludingOverhead() +
+                REFERENCE_SIZE/*relationships reference*/ +
+                8/*relChainPosition*/ + 8/*id*/ +
+                REFERENCE_SIZE/*labels reference*/;
+        if ( relationships != null && relationships.length > 0 )
         {
             size = withArrayOverheadIncludingReferences( size, relationships.length );
             for ( RelIdArray array : relationships )
             {
                 size += array.sizeOfObjectInBytesIncludingOverhead();
             }
+        }
+        if ( labels != null && labels.length > 0 )
+        {
+            size += sizeOfArray( labels );
         }
         return size;
     }
@@ -213,6 +215,7 @@ public class NodeImpl extends ArrayBasedPrimitive
     Iterable<Relationship> getAllRelationshipsOfType( NodeManager nodeManager,
                                                       DirectionWrapper direction, RelationshipType... types )
     {
+        types = deduplicate( types );
         ensureRelationshipMapNotNull( nodeManager );
 
         // We need to check if there are more relationships to load before grabbing
@@ -234,14 +237,9 @@ public class NodeImpl extends ArrayBasedPrimitive
         int actualLength = 0;
         for ( RelationshipType type : types )
         {
-            int typeId;
-            try
+            int typeId = nodeManager.getRelationshipTypeIdFor( type );
+            if ( typeId == TokenHolder.NO_ID )
             {
-                typeId = nodeManager.getRelationshipTypeIdFor( type );
-            }
-            catch ( TokenNotFoundException e )
-            {
-                // This relationship type doesn't even exist in this database
                 continue;
             }
 
@@ -263,6 +261,32 @@ public class NodeImpl extends ArrayBasedPrimitive
         return new RelationshipIterator( result, this, direction, nodeManager, hasMore, false );
     }
 
+    private static RelationshipType[] deduplicate( RelationshipType[] types )
+    {
+        int unique = 0;
+        for ( int i = 0; i < types.length; i++ )
+        {
+            String name = types[i].name();
+            for ( int j = 0; j < unique; j++ )
+            {
+                if ( name.equals( types[j].name() ) )
+                {
+                    name = null; // signal that this relationship is not unique
+                    break; // we will not find more than one conflict
+                }
+            }
+            if ( name != null )
+            { // this has to be done outside the inner loop, otherwise we'd never accept a single one...
+                types[unique++] = types[i];
+            }
+        }
+        if ( unique < types.length )
+        {
+            types = Arrays.copyOf( types, unique );
+        }
+        return types;
+    }
+
     private RelIdIterator getRelationshipsIterator( DirectionWrapper direction, RelIdArray add,
                                                     Collection<Long> remove, int type )
     {
@@ -271,10 +295,7 @@ public class NodeImpl extends ArrayBasedPrimitive
         {
             return new CombinedRelIdIterator( type, direction, src, add, remove );
         }
-        else
-        {
-            return src != null ? src.iterator( direction ) : empty( type ).iterator( direction );
-        }
+        return src != null ? src.iterator( direction ) : empty( type ).iterator( direction );
     }
 
     public Iterable<Relationship> getRelationships( NodeManager nodeManager )
@@ -573,7 +594,7 @@ public class NodeImpl extends ArrayBasedPrimitive
 
     private void putRelIdArray( RelIdArray addRels )
     {
-        // we don't do size update here, instead performed 
+        // we don't do size update here, instead performed
         // when calling commitRelationshipMaps and in getMoreRelationships
 
         // precondition: called under synchronization
@@ -595,12 +616,6 @@ public class NodeImpl extends ArrayBasedPrimitive
         array[array.length - 1] = addRels;
         sort( array );
         relationships = array;
-    }
-
-    public Relationship createRelationshipTo( NodeManager nodeManager, Node thisProxy,
-                                              Node otherNode, RelationshipType type )
-    {
-        return nodeManager.createRelationship( thisProxy, this, otherNode, type );
     }
 
     public boolean hasRelationship( NodeManager nodeManager )
@@ -717,7 +732,7 @@ public class NodeImpl extends ArrayBasedPrimitive
         return nm.newNodeProxyById( getId() );
     }
 
-    public Set<Long> getLabels( StatementState state, CacheLoader<Set<Long>> loader ) throws EntityNotFoundException
+    public int[] getLabels( KernelStatement state, CacheLoader<int[]> loader ) throws EntityNotFoundException
     {
         if ( labels == null )
         {
@@ -732,25 +747,19 @@ public class NodeImpl extends ArrayBasedPrimitive
         return labels;
     }
 
-    public synchronized void commitLabels( Set<Long> added, Set<Long> removed )
+    public boolean hasLabel( KernelStatement state, int labelId, CacheLoader<int[]> loader ) throws EntityNotFoundException
     {
-        if ( labels != null )
-        {
-            HashSet<Long> newLabels = new HashSet<>( labels );
-            if ( added != null )
-            {
-                newLabels.addAll( added );
-            }
-            if ( removed != null )
-            {
-                newLabels.removeAll( removed );
-            }
-            labels = newLabels;
-        }
+        int[] labels = getLabels( state, loader );
+        return binarySearch( labels, labelId ) >= 0;
     }
-    
+
+    public synchronized void commitLabels( int[] labels )
+    {
+        this.labels = labels;
+    }
+
     @Override
-    protected Property noProperty( long key )
+    protected Property noProperty( int key )
     {
         return Property.noNodeProperty( getId(), key );
     }

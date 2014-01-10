@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -186,7 +186,7 @@ public class ClusterMembershipTest
                 leave( 0, 2 )
         );
     }
-
+    
     @Ignore( "Ignore until fix available" )
     @Test
     public void threeNodesJoinAtSameTime()

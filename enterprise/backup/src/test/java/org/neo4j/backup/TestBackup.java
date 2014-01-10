@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,7 +21,6 @@ package org.neo4j.backup;
 
 import java.io.File;
 import java.io.FilenameFilter;
-import java.net.InetAddress;
 
 import org.apache.commons.io.FileUtils;
 import org.junit.Before;
@@ -51,6 +50,7 @@ import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 public class TestBackup
@@ -78,7 +78,7 @@ public class TestBackup
     {
         createInitialDataSet( serverPath );
         ServerInterface server = startServer( serverPath );
-        OnlineBackup backup = OnlineBackup.from( "localhost" );
+        OnlineBackup backup = OnlineBackup.from( "127.0.0.1" );
         createInitialDataSet( backupPath );
         try
         {
@@ -97,7 +97,7 @@ public class TestBackup
     {
         createInitialDataSet( serverPath );
         ServerInterface server = startServer( serverPath );
-        OnlineBackup backup = OnlineBackup.from( "localhost" );
+        OnlineBackup backup = OnlineBackup.from( "127.0.0.1" );
         try
         {
             backup.incremental( backupPath.getPath() );
@@ -119,7 +119,7 @@ public class TestBackup
         {
             createInitialDataSet( serverPath );
             server = startServer( serverPath );
-            OnlineBackup backup = OnlineBackup.from( InetAddress.getLocalHost().getHostAddress() );
+            OnlineBackup backup = OnlineBackup.from( "127.0.0.1" );
             backup.full( backupPath.getPath() );
             shutdownServer( server );
             server = null;
@@ -165,7 +165,7 @@ public class TestBackup
         {
             createInitialDataSet( serverPath );
             server = startServer( serverPath );
-            OnlineBackup backup = OnlineBackup.from( InetAddress.getLocalHost().getHostAddress() );
+            OnlineBackup backup = OnlineBackup.from( "127.0.0.1" );
             backup.full( backupPath.getPath() );
             shutdownServer( server );
             server = null;
@@ -226,7 +226,7 @@ public class TestBackup
         ServerInterface server = startServer( serverPath );
 
         // START SNIPPET: onlineBackup
-        OnlineBackup backup = OnlineBackup.from( InetAddress.getLocalHost().getHostAddress() );
+        OnlineBackup backup = OnlineBackup.from( "127.0.0.1" );
         backup.full( backupPath.getPath() );
         // END SNIPPET: onlineBackup
         assertEquals( initialDataSetRepresentation, DbRepresentation.of( backupPath ) );
@@ -246,7 +246,7 @@ public class TestBackup
     {
         createInitialDataSet( serverPath );
         ServerInterface server = startServer( serverPath );
-        OnlineBackup backup = OnlineBackup.from( InetAddress.getLocalHost().getHostAddress() );
+        OnlineBackup backup = OnlineBackup.from( "127.0.0.1" );
 
         // First check full
         backup.full( backupPath.getPath() );
@@ -271,7 +271,7 @@ public class TestBackup
         ServerInterface server = startServer( serverPath );
 
         // Grab initial backup from server A
-        OnlineBackup backup = OnlineBackup.from( InetAddress.getLocalHost().getHostAddress() );
+        OnlineBackup backup = OnlineBackup.from( "127.0.0.1" );
         backup.full( backupPath.getPath() );
         assertEquals( initialDataSetRepresentation, DbRepresentation.of( backupPath ) );
         shutdownServer( server );
@@ -315,7 +315,7 @@ public class TestBackup
             throw new RuntimeException( e );
         }
         */
-        ServerInterface server = new EmbeddedServer( path.getPath() );
+        ServerInterface server = new EmbeddedServer( path.getPath(), "127.0.0.1:6362" );
         server.awaitStarted();
         return server;
     }
@@ -332,7 +332,7 @@ public class TestBackup
         Transaction tx = db.beginTx();
         Node node = db.createNode();
         node.setProperty( "backup", "Is great" );
-        db.getReferenceNode().createRelationshipTo( node,
+        db.createNode().createRelationshipTo( node,
                 DynamicRelationshipType.withName( "LOVES" ) );
         tx.success();
         tx.finish();
@@ -358,7 +358,7 @@ public class TestBackup
         node.setProperty( "myKey", "myValue" );
         Index<Node> nodeIndex = db.index().forNodes( "db-index" );
         nodeIndex.add( node, "myKey", "myValue" );
-        db.getReferenceNode().createRelationshipTo( node,
+        db.createNode().createRelationshipTo( node,
                 DynamicRelationshipType.withName( "KNOWS" ) );
         tx.success();
         tx.finish();
@@ -383,7 +383,7 @@ public class TestBackup
             tx.success();
             tx.finish();
 
-            OnlineBackup backup = OnlineBackup.from( InetAddress.getLocalHost().getHostAddress() );
+            OnlineBackup backup = OnlineBackup.from( "127.0.0.1" );
             backup.full( backupPath.getPath() );
             long lastCommittedTxForLucene = getLastCommittedTx( backupPath.getPath() );
 
@@ -394,7 +394,8 @@ public class TestBackup
                 index.add( node, "key", "value" + i );
                 tx.success();
                 tx.finish();
-                backup.incremental( backupPath.getPath() );
+                backup = backup.incremental( backupPath.getPath() );
+                assertTrue( "Should be consistent", backup.isConsistent() );
                 assertEquals( lastCommittedTxForLucene + i + 1,
                         getLastCommittedTx( backupPath.getPath() ) );
             }
@@ -429,7 +430,7 @@ public class TestBackup
                 transaction.finish();
             }
 
-            OnlineBackup backup = OnlineBackup.from( InetAddress.getLocalHost().getHostAddress() );
+            OnlineBackup backup = OnlineBackup.from( "127.0.0.1" );
             backup.full( backupPath.getPath() );
         }
         finally
@@ -479,10 +480,10 @@ public class TestBackup
         {
             tx.finish();
         }
-        OnlineBackup.from( InetAddress.getLocalHost().getHostAddress() ).full( backupPath.getPath() );
+        OnlineBackup.from( "127.0.0.1" ).full( backupPath.getPath() );
         assertEquals( DbRepresentation.of( db ), DbRepresentation.of( backupPath ) );
         FileUtils.deleteDirectory( new File( backupPath.getPath() ) );
-        OnlineBackup.from( InetAddress.getLocalHost().getHostAddress() ).full( backupPath.getPath() );
+        OnlineBackup.from( "127.0.0.1" ).full( backupPath.getPath() );
         assertEquals( DbRepresentation.of( db ), DbRepresentation.of( backupPath ) );
 
         tx = db.beginTx();
@@ -496,7 +497,8 @@ public class TestBackup
             tx.finish();
         }
         FileUtils.deleteDirectory( new File( backupPath.getPath() ) );
-        OnlineBackup.from( InetAddress.getLocalHost().getHostAddress() ).full( backupPath.getPath() );
+        OnlineBackup backup = OnlineBackup.from( "127.0.0.1" ).full( backupPath.getPath() );
+        assertTrue( "Should be consistent", backup.isConsistent() );
         assertEquals( DbRepresentation.of( db ), DbRepresentation.of( backupPath ) );
         db.shutdown();
     }
@@ -513,7 +515,7 @@ public class TestBackup
         try
         {
             assertStoreIsLocked( sourcePath );
-            OnlineBackup.from( InetAddress.getLocalHost().getHostAddress() ).full( backupPath.getPath() );
+            OnlineBackup.from( "127.0.0.1" ).full( backupPath.getPath() );
             assertStoreIsLocked( sourcePath );
         }
         finally

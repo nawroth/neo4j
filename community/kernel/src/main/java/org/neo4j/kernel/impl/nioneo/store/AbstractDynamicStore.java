@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -473,10 +473,11 @@ public abstract class AbstractDynamicStore extends CommonAbstractStore implement
         if ( target.length < totalLength )
             target = new byte[totalLength];
         
-        ByteBuffer buffer = ByteBuffer.wrap( target );
+        ByteBuffer buffer = ByteBuffer.wrap( target, 0, totalLength );
         for ( DynamicRecord record : records )
             buffer.put( record.getData() );
-        return ByteBuffer.wrap( target, 0, totalLength );
+        buffer.position( 0 );
+        return buffer;
     }
 
     private long findHighIdBackwards() throws IOException

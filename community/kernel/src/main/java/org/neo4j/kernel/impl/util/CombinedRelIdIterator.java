@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -48,12 +48,6 @@ public class CombinedRelIdIterator implements RelIdIterator
     public int getType()
     {
         return type;
-    }
-
-    @Override
-    public RelIdArray getIds()
-    {
-        return srcIterator.getIds();
     }
 
     @Override

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,6 +21,7 @@ package org.neo4j.graphdb;
 
 import org.junit.Rule;
 import org.junit.Test;
+
 import org.neo4j.test.ImpermanentDatabaseRule;
 import org.neo4j.tooling.GlobalGraphOperations;
 
@@ -30,7 +31,7 @@ public class CreateAndDeleteNodesIT
     public @Rule ImpermanentDatabaseRule dbRule = new ImpermanentDatabaseRule();
 
     enum RelTypes implements RelationshipType {
-        ASD;
+        ASD
     }
 
     @Test
@@ -38,7 +39,7 @@ public class CreateAndDeleteNodesIT
     {
         // Given
         GraphDatabaseService beansAPI = dbRule.getGraphDatabaseService();
-        Node myNode = null;
+        Node myNode;
 
         // When
         Transaction tx = beansAPI.beginTx();
@@ -47,9 +48,10 @@ public class CreateAndDeleteNodesIT
             myNode = beansAPI.createNode();
             myNode.setProperty( "Name", "Bob" );
 
-            myNode.createRelationshipTo( beansAPI.getReferenceNode(), RelTypes.ASD );
+            myNode.createRelationshipTo( beansAPI.createNode(), RelTypes.ASD );
             tx.success();
-        } finally
+        }
+        finally
         {
             tx.finish();
         }

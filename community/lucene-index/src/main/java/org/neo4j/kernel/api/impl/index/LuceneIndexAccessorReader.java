@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -26,8 +26,7 @@ import org.apache.lucene.search.SearcherManager;
 
 import org.neo4j.index.impl.lucene.Hits;
 import org.neo4j.kernel.api.index.IndexReader;
-import org.neo4j.kernel.impl.api.AbstractPrimitiveLongIterator;
-import org.neo4j.kernel.impl.api.PrimitiveLongIterator;
+import org.neo4j.kernel.impl.util.PrimitiveLongIterator;
 
 class LuceneIndexAccessorReader implements IndexReader
 {
@@ -47,36 +46,8 @@ class LuceneIndexAccessorReader implements IndexReader
     {
         try
         {
-            final Hits hits = new Hits( searcher, documentLogic.newQuery( value ), null );
-            return new AbstractPrimitiveLongIterator()
-            {
-                int size = hits.length(), index;
-                
-                {
-                    computeNext();
-                }
-                
-                @Override
-                protected void computeNext()
-                {
-                    if ( index < size )
-                    {
-                        try
-                        {
-                            nextValue = documentLogic.getNodeId( hits.doc( index++ ) );
-                            hasNext = true;
-                        }
-                        catch ( IOException e )
-                        {
-                            throw new RuntimeException( e );
-                        }
-                    }
-                    else
-                    {
-                        hasNext = false;
-                    }
-                }
-            };
+            Hits hits = new Hits( searcher, documentLogic.newQuery( value ), null );
+            return new HitsPrimitiveLongIterator( hits, documentLogic );
         }
         catch ( IOException e )
         {

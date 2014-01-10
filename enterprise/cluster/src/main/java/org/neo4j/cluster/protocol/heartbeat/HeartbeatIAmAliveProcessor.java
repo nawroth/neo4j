@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -45,15 +45,15 @@ public class HeartbeatIAmAliveProcessor implements MessageProcessor
     @Override
     public boolean process( Message<? extends MessageType> message )
     {
-        if (!message.isInternal() && !message.isBroadcast() &&
+        if (!message.isInternal() &&
                 !message.getMessageType().equals( HeartbeatMessage.i_am_alive ))
         {
             String from = message.getHeader( Message.FROM );
             if ( !from.equals( message.getHeader( Message.TO ) ) )
             {
-                InstanceId id = clusterContext.getConfiguration().getServerId( URI.create( from ) );
+                InstanceId id = clusterContext.getConfiguration().getIdForUri( URI.create( from ) );
 
-                if (id != null)
+                if (id != null && !clusterContext.isMe( id ))
                 {
                     output.offer( message.copyHeadersTo(
                             Message.internal( HeartbeatMessage.i_am_alive,

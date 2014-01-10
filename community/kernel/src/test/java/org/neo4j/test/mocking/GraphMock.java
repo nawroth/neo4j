@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -76,6 +76,11 @@ public class GraphMock
     public static Relationship relationship( long id, Node start, String type, Node end, Property... properties )
     {
         return mockRelationship( id, start, type, end, properties( properties ) );
+    }
+
+    public static Link link( Relationship relationship, Node node )
+    {
+        return Link.link( relationship, node );
     }
 
     public static Path path( Node node, Link... links )

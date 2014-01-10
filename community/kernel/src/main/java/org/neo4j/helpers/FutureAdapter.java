@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -70,7 +70,7 @@ public abstract class FutureAdapter<V> implements Future<V>
         }
     };
     
-    public static final Future<Void> VOID = new Present<Void>( null );
+    public static final Future<Void> VOID = new Present<>( null );
     
     public static <T> Future<T> latchGuardedValue( final ValueGetter<T> value, final CountDownLatch guardedByLatch )
     {

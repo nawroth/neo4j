@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -23,7 +23,7 @@ import java.lang.reflect.Array;
 
 class PropertyConversion
 {
-    static Property convertProperty( long propertyKeyId, Object value )
+    static DefinedProperty convertProperty( int propertyKeyId, Object value )
     {
         if ( value instanceof String )
         {
@@ -109,7 +109,7 @@ class PropertyConversion
         }
     }
 
-    private static Property arrayProperty( long propertyKeyId, Object[] value )
+    private static DefinedProperty arrayProperty( int propertyKeyId, Object[] value )
     {
         if ( value instanceof String[] )
         {
@@ -163,31 +163,5 @@ class PropertyConversion
             Array.set( target, i, value[i] );
         }
         return target;
-    }
-
-    public static Property chooseLongPropertyType( long propertyKeyId, long value )
-    {
-        if ( value < 0 )
-        {
-            if ( value >= Integer.MIN_VALUE )
-            {
-                return new SmallLongProperty( propertyKeyId, (int) value );
-            }
-            else
-            {
-                return new BigLongProperty( propertyKeyId, value );
-            }
-        }
-        else
-        {
-            if ( value <= Integer.MAX_VALUE )
-            {
-                return new SmallLongProperty( propertyKeyId, (int) value );
-            }
-            else
-            {
-                return new BigLongProperty( propertyKeyId, value );
-            }
-        }
     }
 }

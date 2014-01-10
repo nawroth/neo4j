@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -23,22 +23,28 @@ import java.util.concurrent.atomic.AtomicInteger;
 
 import org.neo4j.graphdb.event.ErrorState;
 import org.neo4j.graphdb.event.KernelEventHandler;
+import org.neo4j.kernel.AvailabilityGuard;
+import org.neo4j.kernel.ha.com.master.Master;
 import org.neo4j.kernel.impl.transaction.TxManager;
 import org.neo4j.kernel.impl.transaction.XaDataSourceManager;
 
-public class HaKernelPanicHandler implements KernelEventHandler
+public class HaKernelPanicHandler implements KernelEventHandler, AvailabilityGuard.AvailabilityRequirement
 {
     private final XaDataSourceManager dataSourceManager;
     private final TxManager txManager;
     private final AtomicInteger epoch = new AtomicInteger();
-    private final InstanceAccessGuard accessGuard;
+    private final AvailabilityGuard availabilityGuard;
+    private final DelegateInvocationHandler<Master> masterDelegateInvocationHandler;
 
     public HaKernelPanicHandler( XaDataSourceManager dataSourceManager, TxManager txManager,
-            InstanceAccessGuard accessGuard )
+                                 AvailabilityGuard availabilityGuard,
+                                 DelegateInvocationHandler<Master> masterDelegateInvocationHandler )
     {
         this.dataSourceManager = dataSourceManager;
         this.txManager = txManager;
-        this.accessGuard = accessGuard;
+        this.availabilityGuard = availabilityGuard;
+        this.masterDelegateInvocationHandler = masterDelegateInvocationHandler;
+        availabilityGuard.grant(this);
     }
 
     @Override
@@ -57,9 +63,11 @@ public class HaKernelPanicHandler implements KernelEventHandler
                 synchronized ( dataSourceManager )
                 {
                     if ( myEpoch != epoch.get() )
+                    {
                         return;
-                    
-                    accessGuard.enter();
+                    }
+
+                    availabilityGuard.deny(this);
                     try
                     {
                         txManager.stop();
@@ -67,11 +75,12 @@ public class HaKernelPanicHandler implements KernelEventHandler
                         dataSourceManager.start();
                         txManager.start();
                         txManager.doRecovery();
+                        masterDelegateInvocationHandler.harden();
                         epoch.incrementAndGet();
                     }
                     finally
                     {
-                        accessGuard.exit();
+                        availabilityGuard.grant(this);
                     }
                 }
             }
@@ -79,6 +88,11 @@ public class HaKernelPanicHandler implements KernelEventHandler
             {
                 throw new RuntimeException( "error while handling kernel panic for TX_MANAGER_NOT_OK", t );
             }
+        }
+        else if ( error == ErrorState.STORAGE_MEDIA_FULL )
+        {
+            // Fatal error - Permanently unavailable
+            availabilityGuard.shutdown();
         }
     }
 
@@ -92,5 +106,11 @@ public class HaKernelPanicHandler implements KernelEventHandler
     public ExecutionOrder orderComparedTo( KernelEventHandler other )
     {
         return ExecutionOrder.DOESNT_MATTER;
+    }
+
+    @Override
+    public String description()
+    {
+        return getClass().getSimpleName();
     }
 }

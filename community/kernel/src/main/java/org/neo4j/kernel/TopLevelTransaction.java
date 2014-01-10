@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -20,16 +20,19 @@
 package org.neo4j.kernel;
 
 import javax.transaction.RollbackException;
-import javax.transaction.Status;
-import javax.transaction.SystemException;
 
 import org.neo4j.graphdb.Lock;
 import org.neo4j.graphdb.PropertyContainer;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.TransactionFailureException;
 import org.neo4j.kernel.impl.core.TransactionState;
+import org.neo4j.kernel.impl.persistence.PersistenceManager;
 import org.neo4j.kernel.impl.transaction.AbstractTransactionManager;
 
+/**
+ * @deprecated This will be moved to internal packages in the next major release.
+ */
+@Deprecated
 public class TopLevelTransaction implements Transaction
 {
     static class TransactionOutcome
@@ -62,14 +65,16 @@ public class TopLevelTransaction implements Transaction
             return failure;
         }
     }
-    
+
+    private final PersistenceManager persistenceManager;
     private final AbstractTransactionManager transactionManager;
     protected final TransactionOutcome transactionOutcome = new TransactionOutcome();
     private final TransactionState state;
 
-    public TopLevelTransaction( AbstractTransactionManager transactionManager,
+    public TopLevelTransaction( PersistenceManager persistenceManager, AbstractTransactionManager transactionManager,
             TransactionState state )
     {
+        this.persistenceManager = persistenceManager;
         this.transactionManager = transactionManager;
         this.state = state;
     }
@@ -99,22 +104,15 @@ public class TopLevelTransaction implements Transaction
     {
         transactionOutcome.success();
     }
-    
-    protected boolean isMarkedAsSuccessful()
-    {
-        try
-        {
-            return transactionOutcome.canCommit() && transactionManager.getTransaction().getStatus() !=
-                    Status.STATUS_MARKED_ROLLBACK;
-        }
-        catch ( SystemException e )
-        {
-            throw new RuntimeException( e );
-        }
-    }
 
     @Override
-    public void finish()
+    public final void finish()
+    {
+        close();
+    }
+    
+    @Override
+    public void close()
     {
         try
         {
@@ -123,7 +121,6 @@ public class TopLevelTransaction implements Transaction
             {
                 if ( transactionOutcome.canCommit()  )
                 {
-                    // TODO Why call transaction commit, since it just delegates back to TxManager.commit()?
                     transaction.commit();
                 }
                 else
@@ -152,12 +149,14 @@ public class TopLevelTransaction implements Transaction
     @Override
     public Lock acquireWriteLock( PropertyContainer entity )
     {
+        persistenceManager.ensureKernelIsEnlisted();
         return state.acquireWriteLock( entity );
     }
 
     @Override
     public Lock acquireReadLock( PropertyContainer entity )
     {
+        persistenceManager.ensureKernelIsEnlisted();
         return state.acquireReadLock( entity );
     }
 }

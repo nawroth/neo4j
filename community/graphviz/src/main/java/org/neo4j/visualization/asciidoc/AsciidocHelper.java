@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -22,6 +22,7 @@ package org.neo4j.visualization.asciidoc;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.UnsupportedEncodingException;
+import java.util.regex.Pattern;
 
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Transaction;
@@ -36,9 +37,14 @@ import static java.lang.String.format;
 public class AsciidocHelper
 {
     /**
-     * Cut to max 123 chars for PDF layout compliance.
+     * Cut to max 123 chars for PDF layout compliance. Or even less, for
+     * readability.
      */
-    private static final int MAX_CHARS_PER_LINE = 123;
+    private static final int MAX_CHARS_PER_LINE = 100;
+    /**
+     * Cut text message line length for readability.
+     */
+    private static final int MAX_TEXT_LINE_LENGTH = 80;
     /**
      * Characters to remove from the title.
      */
@@ -87,7 +93,6 @@ public class AsciidocHelper
                                                               GraphDatabaseService graph, String identifier,
                                                               String graphvizOptions )
     {
-        removeReferenceNode( graph );
         return createGraphViz( title, graph, identifier,
                 AsciiDocSimpleStyle.withAutomaticRelationshipTypeColors(),
                 graphvizOptions );
@@ -104,7 +109,6 @@ public class AsciidocHelper
             String title, GraphDatabaseService graph, String identifier,
             String graphvizOptions )
     {
-        removeReferenceNode( graph );
         return createGraphViz( title, graph, identifier,
                 AsciiDocStyle.withAutomaticRelationshipTypeColors(),
                 graphvizOptions );
@@ -126,8 +130,7 @@ public class AsciidocHelper
                                          GraphDatabaseService graph, String identifier,
                                          GraphStyle graphStyle, String graphvizOptions )
     {
-        Transaction transaction = graph.beginTx();
-        try
+        try ( Transaction tx = graph.beginTx() )
         {
             GraphvizWriter writer = new GraphvizWriter( graphStyle );
             ByteArrayOutputStream out = new ByteArrayOutputStream();
@@ -142,6 +145,8 @@ public class AsciidocHelper
 
             String safeTitle = title.replaceAll( ILLEGAL_STRINGS, "" );
 
+            tx.success();
+
             try
             {
                 return "." + title + "\n[\"dot\", \""
@@ -154,24 +159,6 @@ public class AsciidocHelper
                 throw new RuntimeException( e );
             }
         }
-        finally
-        {
-            transaction.finish();
-        }
-    }
-
-    private static void removeReferenceNode( GraphDatabaseService graph )
-    {
-        Transaction tx = graph.beginTx();
-        try
-        {
-            graph.getReferenceNode().delete();
-            tx.success();
-        }
-        finally
-        {
-            tx.finish();
-        }
     }
 
     public static String createOutputSnippet( final String output )
@@ -183,6 +170,66 @@ public class AsciidocHelper
     {
         return "[queryresult]\n----\n" + output
                 + (output.endsWith( "\n" ) ? "" : "\n") + "----\n";
+    }
+
+    public static String createQueryFailureSnippet( final String output )
+    {
+        return "[source]\n----\n" + wrapText( output ) + "\n----\n";
+    }
+
+    private static String wrapText( final String text )
+    {
+        return wrap( text, MAX_TEXT_LINE_LENGTH, " ", "\n" );
+    }
+
+    static String wrapQuery( final String query )
+    {
+        String wrapped = wrap( query, MAX_CHARS_PER_LINE, ", ", ",\n  " );
+        wrapped = wrap( wrapped, MAX_CHARS_PER_LINE, "),(", "),\n  (" );
+        return wrap( wrapped, MAX_CHARS_PER_LINE, " ", "\n  " );
+    }
+
+    private static String wrap( final String text, final int maxChars, final String search, final String replace )
+    {
+        StringBuffer out = new StringBuffer( text.length() + 10 * replace.length() );
+        String pattern = Pattern.quote( search );
+        for ( String line : text.trim()
+                .split( "\n" ) )
+        {
+            if ( line.length() < maxChars )
+            {
+                out.append( line )
+                        .append( '\n' );
+            }
+            else
+            {
+                int currentLength = 0;
+                for ( String word : line.split( pattern ) )
+                {
+                    if ( currentLength + word.length() > maxChars )
+                    {
+                        if ( currentLength > 0 )
+                        {
+                            out.append( replace );
+                        }
+                        out.append( word );
+                        currentLength = replace.length() + word.length();
+                    }
+                    else
+                    {
+                        if ( currentLength != 0 )
+                        {
+                            out.append( search );
+                            currentLength += search.length();
+                        }
+                        out.append( word );
+                        currentLength += word.length();
+                    }
+                }
+                out.append( '\n' );
+            }
+        }
+        return out.substring( 0, out.length() - 1 );
     }
 
     public static String createCypherSnippet( final String query )
@@ -223,6 +270,12 @@ public class AsciidocHelper
         }
         String result = createAsciiDocSnippet(language, formattedQuery);
         return limitChars( result );
+    }
+
+    public static String createCypherSnippetFromPreformattedQuery( final String formattedQuery )
+    {
+        return format( "[source,%s]\n----\n%s%s----\n", "cypher", wrapQuery( formattedQuery ),
+                formattedQuery.endsWith( "\n" ) ? "" : "\n" );
     }
 
     public static String createAsciiDocSnippet(String language, String formattedQuery)

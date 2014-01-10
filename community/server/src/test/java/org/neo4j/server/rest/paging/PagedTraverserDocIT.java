@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -23,6 +23,7 @@ import java.net.URI;
 import java.util.Map;
 import java.util.concurrent.Callable;
 import java.util.concurrent.TimeUnit;
+
 import javax.ws.rs.core.MediaType;
 
 import org.junit.AfterClass;
@@ -32,15 +33,15 @@ import org.junit.ClassRule;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
-
 import org.neo4j.graphdb.DynamicRelationshipType;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
+import org.neo4j.helpers.FakeClock;
 import org.neo4j.kernel.impl.annotations.Documented;
 import org.neo4j.server.CommunityNeoServer;
 import org.neo4j.server.database.Database;
+import org.neo4j.server.helpers.CommunityServerBuilder;
 import org.neo4j.server.helpers.FunctionalTestHelper;
-import org.neo4j.server.helpers.ServerBuilder;
 import org.neo4j.server.helpers.ServerHelper;
 import org.neo4j.server.rest.JaxRsResponse;
 import org.neo4j.server.rest.RESTDocsGenerator;
@@ -50,7 +51,6 @@ import org.neo4j.server.rest.domain.JsonHelper;
 import org.neo4j.server.scripting.javascript.GlobalJavascriptInitializer;
 import org.neo4j.test.TestData;
 import org.neo4j.test.server.ExclusiveServerTestBase;
-import org.neo4j.tooling.FakeClock;
 
 import static org.hamcrest.Matchers.containsString;
 import static org.junit.Assert.assertEquals;
@@ -86,7 +86,7 @@ public class PagedTraverserDocIT extends ExclusiveServerTestBase
     public static void setupServer() throws Exception
     {
         clock = new FakeClock();
-        server = ServerBuilder.server()
+        server = CommunityServerBuilder.server()
                 .usingDatabaseDir( staticFolder.getRoot().getAbsolutePath() )
                 .withClock( clock )
                 .build();
@@ -139,7 +139,7 @@ public class PagedTraverserDocIT extends ExclusiveServerTestBase
     }
 
     /**
-     * Creating a paged traverser. Paged traversers are created by +POST+-ing a
+     * Creating a paged traverser. Paged traversers are created by ++POST++-ing a
      * traversal description to the link identified by the +paged_traverser+ key
      * in a node representation. When creating a paged traverser, the same
      * options apply as for a regular traverser, meaning that +node+, +path+,
@@ -165,7 +165,7 @@ public class PagedTraverserDocIT extends ExclusiveServerTestBase
                 .toString(), containsString( "/db/data/node/" + theStartNode.getId() + "/paged/traverse/node/" ) );
         assertEquals( "application/json; charset=UTF-8", entity.response()
                 .getType()
-                .toString());
+                .toString() );
     }
 
     /**
@@ -175,12 +175,12 @@ public class PagedTraverserDocIT extends ExclusiveServerTestBase
      * issues a HTTP GET request on the paged traversal URI which causes the
      * traversal to fill the next page (or partially fill it if insufficient
      * results are available).
-     * <p/>
+     * 
      * Note that if a traverser expires through inactivity it will cause a 404
      * response on the next +GET+ request. Traversers' leases are renewed on
      * every successful access for the same amount of time as originally
      * specified.
-     * <p/>
+     * 
      * When the paged traverser reaches the end of its results, the client can
      * expect a 404 response as the traverser is disposed by the server.
      */
@@ -295,7 +295,7 @@ public class PagedTraverserDocIT extends ExclusiveServerTestBase
         int negativeLeaseTime = -9;
         JaxRsResponse response = RestRequest.req().post(
                 functionalTestHelper.nodeUri( theStartNode.getId() ) + "/paged/traverse/node?leaseTime=" +
-                String.valueOf( negativeLeaseTime ) , traverserDescription() );
+                        String.valueOf( negativeLeaseTime ), traverserDescription() );
 
         assertEquals( 400, response.getStatus() );
     }
@@ -308,7 +308,7 @@ public class PagedTraverserDocIT extends ExclusiveServerTestBase
         int negativePageSize = -99;
         JaxRsResponse response = RestRequest.req().post(
                 functionalTestHelper.nodeUri( theStartNode.getId() ) + "/paged/traverse/node?pageSize=" +
-                String.valueOf( negativePageSize ), traverserDescription() );
+                        String.valueOf( negativePageSize ), traverserDescription() );
 
         assertEquals( 400, response.getStatus() );
     }
@@ -319,8 +319,10 @@ public class PagedTraverserDocIT extends ExclusiveServerTestBase
     {
         GlobalJavascriptInitializer.initialize( GlobalJavascriptInitializer.Mode.SANDBOXED );
 
+        theStartNode = createLinkedList( 1, server.getDatabase() );
+        
         JaxRsResponse response = RestRequest.req().post(
-                functionalTestHelper.nodeUri( 0 ) + "/paged/traverse/node?pageSize=50",
+                functionalTestHelper.nodeUri( theStartNode.getId() ) + "/paged/traverse/node?pageSize=50",
                 "{"
                         + "\"prune_evaluator\":{\"language\":\"builtin\",\"name\":\"none\"},"
                         + "\"return_filter\":{\"language\":\"javascript\",\"body\":\"position.getClass()" +
@@ -346,6 +348,7 @@ public class PagedTraverserDocIT extends ExclusiveServerTestBase
         deleteResponse = request.delete( response.getLocation() );
         assertEquals( 404, deleteResponse.getStatus() );
     }
+
     @Test
     public void shouldAcceptJsonAndStreamingFlagAndProduceStreamedJson()
     {
@@ -356,7 +359,7 @@ public class PagedTraverserDocIT extends ExclusiveServerTestBase
         JaxRsResponse pagedTraverserResponse = createStreamingPagedTraverserWithTimeoutInMinutesAndPageSize( 60, 1 );
 
 
-        System.out.println(pagedTraverserResponse.getHeaders().getFirst( "Content-Type" ));
+        System.out.println( pagedTraverserResponse.getHeaders().getFirst( "Content-Type" ) );
 
         // then
         assertNotNull( pagedTraverserResponse.getHeaders().getFirst( "Content-Type" ) );
@@ -412,14 +415,15 @@ public class PagedTraverserDocIT extends ExclusiveServerTestBase
     public void shouldHaveTransportEncodingChunkedOnResponseHeader()
     {
         // given
-        theStartNode =  createLinkedList( SHORT_LIST_LENGTH, server.getDatabase() );
+        theStartNode = createLinkedList( SHORT_LIST_LENGTH, server.getDatabase() );
 
         // when
         JaxRsResponse response = createStreamingPagedTraverserWithTimeoutInMinutesAndPageSize( 60, 1 );
 
         // then
         assertEquals( 201, response.getStatus() );
-        assertEquals( "application/json; charset=UTF-8; stream=true", response.getHeaders().getFirst( "Content-Type" ) );
+        assertEquals( "application/json; charset=UTF-8; stream=true", response.getHeaders().getFirst( "Content-Type"
+        ) );
         assertThat( response.getHeaders().getFirst( "Transfer-Encoding" ), containsString( "chunked" ) );
     }
 
@@ -478,9 +482,8 @@ public class PagedTraverserDocIT extends ExclusiveServerTestBase
 
     private Node createLinkedList( final int listLength, final Database db )
     {
-        Transaction tx = db.getGraph().beginTx();
         Node startNode = null;
-        try
+        try ( Transaction tx = db.getGraph().beginTx() )
         {
             Node previous = null;
             for ( int i = 0; i < listLength; i++ )
@@ -501,10 +504,6 @@ public class PagedTraverserDocIT extends ExclusiveServerTestBase
             }
             tx.success();
             return startNode;
-        }
-        finally
-        {
-            tx.finish();
         }
     }
 }

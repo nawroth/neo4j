@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -26,6 +26,7 @@ import java.nio.ByteBuffer;
 import java.nio.channels.ReadableByteChannel;
 import java.util.HashMap;
 import java.util.Map;
+
 import javax.transaction.Transaction;
 import javax.transaction.TransactionManager;
 import javax.transaction.xa.XAException;
@@ -74,6 +75,8 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
+import static org.neo4j.kernel.impl.transaction.xaframework.InjectedTransactionValidator.ALLOW_ALL;
+
 public class TestXaFramework extends AbstractNeo4jTestCase
 {
     private TransactionManager tm;
@@ -106,12 +109,11 @@ public class TestXaFramework extends AbstractNeo4jTestCase
     }
 
     @Before
-    @SuppressWarnings("deprecation")
     public void setUpFramework()
     {
         getTransaction().finish();
-        tm = getGraphDbAPI().getTxManager();
-        xaDsMgr = getGraphDbAPI().getXaDataSourceManager();
+        tm = getGraphDbAPI().getDependencyResolver().resolveDependency( TransactionManager.class );
+        xaDsMgr = getGraphDbAPI().getDependencyResolver().resolveDependency( XaDataSourceManager.class );
     }
 
     private static class DummyCommand extends XaCommand
@@ -204,7 +206,7 @@ public class TestXaFramework extends AbstractNeo4jTestCase
     private static class DummyTransactionFactory extends XaTransactionFactory
     {
         @Override
-        public XaTransaction create( int identifier, TransactionState state )
+        public XaTransaction create( int identifier, long lastCommittedTxWhenTransactionStarted, TransactionState state )
         {
             return new DummyTransaction( identifier, getLogicalLog(), state );
         }
@@ -259,21 +261,22 @@ public class TestXaFramework extends AbstractNeo4jTestCase
                             @SuppressWarnings("deprecation")
                             public TxIdGenerator getTxIdGenerator()
                             {
-                                return getGraphDbAPI().getTxIdGenerator();
+                                return getGraphDbAPI().getDependencyResolver().resolveDependency( TxIdGenerator.class );
                             }
                         };
                     }
                 };
-                
+
                 map.put( "store_dir", path().getPath() );
                 xaContainer = xaFactory.newXaContainer( this, resourceFile(),
                         new DummyCommandFactory(),
+                        ALLOW_ALL,
                         new DummyTransactionFactory(), stateFactory, new TransactionInterceptorProviders(
                         Iterables.<TransactionInterceptorProvider>empty(),
                         new DependencyResolver.Adapter()
                         {
                             @Override
-                            public <T> T resolveDependency( Class<T> type, SelectionStrategy<T> selector )
+                            public <T> T resolveDependency( Class<T> type, SelectionStrategy selector )
                             {
                                 return type.cast( new Config( MapUtil.stringMap(
                                         GraphDatabaseSettings.intercept_committing_transactions.name(),
@@ -282,7 +285,7 @@ public class TestXaFramework extends AbstractNeo4jTestCase
                                         Settings.FALSE
                                 ) ) );
                             }
-                        } ) );
+                        } ), false );
                 xaContainer.openLogicalLog();
             }
             catch ( IOException e )
@@ -397,7 +400,9 @@ public class TestXaFramework extends AbstractNeo4jTestCase
                 config, UTF8.encode( "DDDDDD" ), "dummy_datasource",
                 new XaFactory(
                         new Config( config, GraphDatabaseSettings.class ), TxIdGenerator.DEFAULT,
-                        new PlaceboTm( null, getGraphDbAPI().getTxIdGenerator() ), new DefaultLogBufferFactory(),
+                        new PlaceboTm( null, getGraphDbAPI().getDependencyResolver()
+                                .resolveDependency( TxIdGenerator.class ) ),
+                        new DefaultLogBufferFactory(),
                         fileSystem, new DevNullLoggingService(),
                         RecoveryVerifier.ALWAYS_VALID, LogPruneStrategies.NO_PRUNING ) ) );
         XaDataSource xaDs = xaDsMgr.getXaDataSource( "dummy_datasource" );
@@ -507,7 +512,10 @@ public class TestXaFramework extends AbstractNeo4jTestCase
         boolean allDeleted = true;
         for ( File file : files )
         {
-            if ( !file.delete() ) allDeleted = false;
+            if ( !file.delete() )
+            {
+                allDeleted = false;
+            }
         }
         assertTrue( "delete all files starting with " + prefix, allDeleted );
     }

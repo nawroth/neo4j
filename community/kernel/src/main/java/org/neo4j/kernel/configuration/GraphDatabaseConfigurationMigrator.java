@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -29,6 +29,9 @@ import static java.util.regex.Pattern.quote;
 
 public class GraphDatabaseConfigurationMigrator extends BaseConfigurationMigrator
 {
+
+    private static final String KEEP_LOGICAL_LOGS = "keep_logical_logs";
+
     {
         add( new SpecificPropertyMigration( "enable_online_backup",
                 "enable_online_backup has been replaced with online_backup_enabled and online_backup_port" )
@@ -117,20 +120,20 @@ public class GraphDatabaseConfigurationMigrator extends BaseConfigurationMigrato
             }
         } );
 
-        add( new SpecificPropertyMigration( Config.KEEP_LOGICAL_LOGS, "multi-value configuration of keep_logical_logs" +
+        add( new SpecificPropertyMigration( KEEP_LOGICAL_LOGS, "multi-value configuration of keep_logical_logs" +
                 " has been removed, any configuration specified will apply to all data sources" )
         {
             @Override
             public boolean appliesTo( Map<String, String> rawConfiguration )
             {
-                return configValueContainsMultipleParameters( rawConfiguration.get( Config.KEEP_LOGICAL_LOGS ) );
+                return configValueContainsMultipleParameters( rawConfiguration.get( KEEP_LOGICAL_LOGS ) );
             }
 
             @Override
             public void setValueWithOldSetting( String value, Map<String, String> rawConfiguration )
             {
                 boolean keep = false;
-                Args map = parseMapFromConfigValue( Config.KEEP_LOGICAL_LOGS, value );
+                Args map = parseMapFromConfigValue( KEEP_LOGICAL_LOGS, value );
                 for ( Map.Entry<String, String> entry : map.asMap().entrySet() )
                 {
                     if ( Boolean.parseBoolean( entry.getValue() ) )
@@ -139,7 +142,7 @@ public class GraphDatabaseConfigurationMigrator extends BaseConfigurationMigrato
                         break;
                     }
                 }
-                rawConfiguration.put( Config.KEEP_LOGICAL_LOGS, String.valueOf( keep ) );
+                rawConfiguration.put( KEEP_LOGICAL_LOGS, String.valueOf( keep ) );
             }
         } );
 
@@ -151,6 +154,9 @@ public class GraphDatabaseConfigurationMigrator extends BaseConfigurationMigrato
             {
             }
         } );
+
+        add( new ConfigValueChanged( "cache_type", "gcr", "hpc",
+                "'gcr' cache type has been renamed to 'hpc', High Performance Cache." ));
     }
 
     @Deprecated
@@ -162,7 +168,7 @@ public class GraphDatabaseConfigurationMigrator extends BaseConfigurationMigrato
     @Deprecated
     public static Args parseMapFromConfigValue( String name, String configValue )
     {
-        Map<String, String> result = new HashMap<String, String>();
+        Map<String, String> result = new HashMap<>();
         for ( String part : configValue.split( quote( "," ) ) )
         {
             String[] tokens = part.split( quote( "=" ) );

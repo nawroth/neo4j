@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -23,7 +23,7 @@ import java.util.concurrent.Callable;
 
 class LazyStringProperty extends LazyProperty<String>
 {
-    LazyStringProperty( long propertyKeyId, Callable<String> producer )
+    LazyStringProperty( int propertyKeyId, Callable<String> producer )
     {
         super( propertyKeyId, producer );
     }

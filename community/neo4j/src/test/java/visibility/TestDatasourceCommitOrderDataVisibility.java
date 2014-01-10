@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -24,6 +24,7 @@ import java.util.HashSet;
 
 import org.junit.Before;
 import org.junit.Test;
+
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
@@ -51,32 +52,33 @@ public class TestDatasourceCommitOrderDataVisibility
     @Test
     public void shouldNotMakeIndexWritesVisibleUntilCommit() throws Exception
     {
-        Transaction transaction = graphDatabaseService.beginTx();
-        try
+        Node commonNode;
+        try(Transaction tx = graphDatabaseService.beginTx())
+        {
+            commonNode = graphDatabaseService.createNode();
+            tx.success();
+        }
+
+        try(Transaction transaction = graphDatabaseService.beginTx())
         {
             // index write first so that that datastore is added first
-            graphDatabaseService.index().forNodes( INDEX_NAME ).add( graphDatabaseService.getReferenceNode(),
-                    INDEX_KEY, INDEX_VALUE );
-            graphDatabaseService.getReferenceNode().setProperty( PROPERTY_NAME, PROPERTY_VALUE );
+            graphDatabaseService.index().forNodes( INDEX_NAME ).add( commonNode, INDEX_KEY, INDEX_VALUE );
+            commonNode.setProperty( PROPERTY_NAME, PROPERTY_VALUE );
 
-            assertReferenceNodeIsNotIndexedOutsideThisTransaction();
-            assertReferenceNodeIsUnchangedOutsideThisTransaction();
+            assertNodeIsNotIndexedOutsideThisTransaction();
+            assertNodeIsUnchangedOutsideThisTransaction(commonNode);
 
             transaction.success();
 
-            assertReferenceNodeIsNotIndexedOutsideThisTransaction();
-            assertReferenceNodeIsUnchangedOutsideThisTransaction();
-        }
-        finally
-        {
-            transaction.finish();
+            assertNodeIsNotIndexedOutsideThisTransaction();
+            assertNodeIsUnchangedOutsideThisTransaction(commonNode);
         }
 
-        assertReferenceNodeIsIndexed();
-        assertReferenceNodeHasBeenUpdated();
+        assertNodeIsIndexed(commonNode);
+        assertNodeHasBeenUpdated( commonNode );
     }
 
-    private void assertReferenceNodeIsNotIndexedOutsideThisTransaction() throws Exception
+    private void assertNodeIsNotIndexedOutsideThisTransaction() throws Exception
     {
         final Collection<Exception> problems = new HashSet<>();
 
@@ -85,8 +87,7 @@ public class TestDatasourceCommitOrderDataVisibility
             @Override
             public void run()
             {
-                Transaction transaction = graphDatabaseService.beginTx();
-                try
+                try(Transaction ignored = graphDatabaseService.beginTx())
                 {
                     assertThat( graphDatabaseService.index().forNodes( INDEX_NAME ).get( INDEX_KEY,
                             INDEX_VALUE ).size(), is( 0 ) );
@@ -95,10 +96,6 @@ public class TestDatasourceCommitOrderDataVisibility
                 {
                     problems.add( new Exception( t ) );
                 }
-                finally
-                {
-                    transaction.finish();
-                }
             }
         } );
         thread.start();
@@ -110,7 +107,7 @@ public class TestDatasourceCommitOrderDataVisibility
         }
     }
 
-    private void assertReferenceNodeIsUnchangedOutsideThisTransaction() throws Exception
+    private void assertNodeIsUnchangedOutsideThisTransaction( final Node commonNode ) throws Exception
     {
         final Collection<Exception> problems = new HashSet<>();
 
@@ -119,19 +116,14 @@ public class TestDatasourceCommitOrderDataVisibility
             @Override
             public void run()
             {
-                Transaction transaction = graphDatabaseService.beginTx();
-                try
+                try(Transaction ignored = graphDatabaseService.beginTx())
                 {
-                    assertThat( graphDatabaseService.getReferenceNode().hasProperty( PROPERTY_NAME ), is( false ) );
+                    assertThat( commonNode.hasProperty( PROPERTY_NAME ), is( false ) );
                 }
                 catch ( Throwable t )
                 {
                     problems.add( new Exception( t ) );
                 }
-                finally
-                {
-                    transaction.finish();
-                }
             }
         } );
         thread.start();
@@ -143,7 +135,7 @@ public class TestDatasourceCommitOrderDataVisibility
         }
     }
 
-    private void assertReferenceNodeIsIndexed() throws Exception
+    private void assertNodeIsIndexed(final Node commonNode) throws Exception
     {
         final Collection<Exception> problems = new HashSet<>();
 
@@ -152,20 +144,15 @@ public class TestDatasourceCommitOrderDataVisibility
             @Override
             public void run()
             {
-                Transaction transaction = graphDatabaseService.beginTx();
-                try
+                try(Transaction ignored = graphDatabaseService.beginTx())
                 {
                     Node node = graphDatabaseService.index().forNodes( INDEX_NAME ).get( INDEX_KEY,
                             INDEX_VALUE ).getSingle();
-                    assertThat( node, is( graphDatabaseService.getReferenceNode() ) );
+                    assertThat( node, is( commonNode) );
                 }
                 catch ( Throwable t )
                 {
                     problems.add( new Exception( t ) );
-                }
-                finally
-                {
-                    transaction.finish();
                 }
             }
         } );
@@ -178,7 +165,7 @@ public class TestDatasourceCommitOrderDataVisibility
         }
     }
 
-    private void assertReferenceNodeHasBeenUpdated() throws Exception
+    private void assertNodeHasBeenUpdated( final Node commonNode ) throws Exception
     {
         final Collection<Exception> problems = new HashSet<>();
 
@@ -187,19 +174,14 @@ public class TestDatasourceCommitOrderDataVisibility
             @Override
             public void run()
             {
-                Transaction transaction = graphDatabaseService.beginTx();
-                try
+                try(Transaction ignored = graphDatabaseService.beginTx())
                 {
-                    assertThat( (Integer) graphDatabaseService.getReferenceNode().getProperty( PROPERTY_NAME ),
+                    assertThat( (Integer) commonNode.getProperty( PROPERTY_NAME ),
                             is( PROPERTY_VALUE ) );
                 }
                 catch ( Throwable t )
                 {
                     problems.add( new Exception( t ) );
-                }
-                finally
-                {
-                    transaction.finish();
                 }
             }
         } );

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,21 +19,41 @@
  */
 package org.neo4j.kernel.impl.api;
 
+import org.neo4j.kernel.api.exceptions.ReleaseLocksFailedKernelException;
+
 public interface LockHolder
 {
-    public abstract void acquireNodeReadLock( long nodeId );
+    void acquireNodeReadLock( long nodeId );
 
-    public abstract void acquireNodeWriteLock( long nodeId );
+    void acquireNodeWriteLock( long nodeId );
 
-    public abstract void acquireRelationshipReadLock( long relationshipId );
+    void acquireRelationshipReadLock( long relationshipId );
 
-    public abstract void acquireRelationshipWriteLock( long relationshipId );
+    void acquireRelationshipWriteLock( long relationshipId );
 
-    public abstract void acquireGraphWriteLock();
+    void acquireGraphWriteLock();
 
-    public abstract void acquireSchemaReadLock();
+    void acquireSchemaReadLock();
 
-    public abstract void acquireSchemaWriteLock();
+    void acquireSchemaWriteLock();
 
-    public abstract void releaseLocks();
+    /**
+     * @param propertyValue is a string for serialization purposes (HA). There can be clashes, but these are rare
+     *                      enough, transient, and does not affect correctness.
+     */
+    void acquireIndexEntryWriteLock( int labelId, int propertyKeyId, String propertyValue );
+
+    /**
+     * @param propertyValue is a string for serialization purposes (HA). There can be clashes, but these are rare
+     *                      enough, transient, and does not affect correctness.
+     */
+    ReleasableLock getReleasableIndexEntryReadLock( int labelId, int propertyKeyId, String propertyValue );
+
+    /**
+     * @param propertyValue is a string for serialization purposes (HA). There can be clashes, but these are rare
+     *                      enough, transient, and does not affect correctness.
+     */
+    ReleasableLock getReleasableIndexEntryWriteLock( int labelId, int propertyKeyId, String propertyValue );
+
+    void releaseLocks() throws ReleaseLocksFailedKernelException;
 }

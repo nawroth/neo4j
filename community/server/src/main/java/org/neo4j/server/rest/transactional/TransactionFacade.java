@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,9 +21,10 @@ package org.neo4j.server.rest.transactional;
 
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.net.URI;
+import java.net.URISyntaxException;
 
 import org.neo4j.cypher.javacompat.ExecutionEngine;
-import org.neo4j.kernel.api.KernelAPI;
 import org.neo4j.kernel.impl.util.StringLogger;
 import org.neo4j.server.rest.transactional.error.TransactionLifecycleException;
 import org.neo4j.server.rest.web.TransactionUriScheme;
@@ -50,18 +51,24 @@ import org.neo4j.server.rest.web.TransactionUriScheme;
  */
 public class TransactionFacade
 {
-    private final KernelAPI kernel;
+    private final TransitionalPeriodTransactionMessContainer kernel;
     private final ExecutionEngine engine;
     private final TransactionRegistry registry;
     private final StringLogger log;
+    private final URI baseUri;
 
-    public TransactionFacade( KernelAPI kernel, ExecutionEngine engine,
-                              TransactionRegistry registry, StringLogger log )
+    public TransactionFacade( TransitionalPeriodTransactionMessContainer kernel, ExecutionEngine engine,
+                              TransactionRegistry registry, URI baseUri, StringLogger log )
     {
         this.kernel = kernel;
         this.engine = engine;
         this.registry = registry;
         this.log = log;
+        try {
+          this.baseUri = new URI(baseUri+"db/data");
+        } catch (URISyntaxException e) {
+            throw new RuntimeException(e);
+        }
     }
 
     public TransactionHandle newTransactionHandle( TransactionUriScheme uriScheme ) throws TransactionLifecycleException
@@ -79,8 +86,8 @@ public class TransactionFacade
         return new StatementDeserializer( input );
     }
 
-    public ExecutionResultSerializer serializer( OutputStream output )
+    public ExecutionResultSerializer serializer( OutputStream output ) 
     {
-        return new ExecutionResultSerializer( output, log );
+        return new ExecutionResultSerializer( output, baseUri, log );
     }
 }

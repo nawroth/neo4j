@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -29,6 +29,7 @@ import org.junit.Test;
 
 import org.neo4j.consistency.ConsistencyCheckingError;
 import org.neo4j.consistency.RecordType;
+import org.neo4j.consistency.checking.GraphStoreFixture;
 import org.neo4j.consistency.checking.incremental.intercept.VerifyingTransactionInterceptorProvider;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
@@ -47,7 +48,6 @@ import org.neo4j.kernel.impl.nioneo.store.RecordSerializer;
 import org.neo4j.kernel.impl.nioneo.store.RelationshipRecord;
 import org.neo4j.kernel.impl.nioneo.store.UniquenessConstraintRule;
 import org.neo4j.kernel.impl.transaction.xaframework.TransactionInterceptorProvider;
-import org.neo4j.test.GraphStoreFixture;
 
 import static java.util.Arrays.asList;
 
@@ -72,13 +72,14 @@ public class IncrementalCheckIntegrationTest
                                             GraphStoreFixture.IdGenerator next )
             {
                 DynamicRecord schema = new DynamicRecord( next.schema() );
+                DynamicRecord before = schema.clone();
                 schema.setNextBlock( next.schema() );
                 IndexRule rule = IndexRule.indexRule( 1, 1, 1, new SchemaIndexProvider.Descriptor( "in-memory",
                         "1.0" ) );
                 new RecordSerializer().append( rule ).serialize();
                 schema.setData( new RecordSerializer().append( rule ).serialize() );
 
-                tx.createSchema( asList( schema ) );
+                tx.createSchema( asList(before), asList( schema ) );
             }
         } );
     }
@@ -100,6 +101,9 @@ public class IncrementalCheckIntegrationTest
                 DynamicRecord record1 = new DynamicRecord( ruleId1 );
                 DynamicRecord record2 = new DynamicRecord( ruleId2 );
 
+                DynamicRecord record1Before = record1.clone();
+                DynamicRecord record2Before = record2.clone();
+
                 SchemaIndexProvider.Descriptor providerDescriptor = new SchemaIndexProvider.Descriptor( "in-memory", "1.0" );
 
                 IndexRule rule1 = IndexRule.constraintIndexRule( ruleId1, labelId, propertyKeyId, providerDescriptor, (long) ruleId1);
@@ -114,8 +118,8 @@ public class IncrementalCheckIntegrationTest
                 tx.nodeLabel( labelId, "label" );
                 tx.propertyKey( propertyKeyId, "property" );
 
-                tx.createSchema( records1 );
-                tx.createSchema( records2 );
+                tx.createSchema( asList(record1Before), records1 );
+                tx.createSchema( asList(record2Before), records2 );
             }
         } );
    }
@@ -136,6 +140,8 @@ public class IncrementalCheckIntegrationTest
 
                 DynamicRecord record1 = new DynamicRecord( ruleId1 );
                 DynamicRecord record2 = new DynamicRecord( ruleId2 );
+                DynamicRecord record1Before = record1.clone();
+                DynamicRecord record2Before = record2.clone();
 
                 SchemaIndexProvider.Descriptor providerDescriptor = new SchemaIndexProvider.Descriptor( "in-memory",
                         "1.0" );
@@ -155,8 +161,8 @@ public class IncrementalCheckIntegrationTest
                 tx.nodeLabel( labelId, "label" );
                 tx.propertyKey( propertyKeyId, "property" );
 
-                tx.createSchema( records1 );
-                tx.createSchema( records2 );
+                tx.createSchema( asList(record1Before), records1 );
+                tx.createSchema( asList(record2Before), records2 );
             }
         } );
     }

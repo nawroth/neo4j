@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -144,6 +144,12 @@ public final class Functions
             public TO apply( FROM from )
             {
                 return to.cast( from );
+            }
+
+            @Override
+            public String toString()
+            {
+                return "cast(to=" + to.getName() + ")";
             }
         };
     }

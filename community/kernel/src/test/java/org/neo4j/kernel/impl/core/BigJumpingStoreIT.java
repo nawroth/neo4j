@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -26,6 +26,7 @@ import java.util.Map;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
+
 import org.neo4j.graphdb.Direction;
 import org.neo4j.graphdb.DynamicRelationshipType;
 import org.neo4j.graphdb.Node;
@@ -33,12 +34,10 @@ import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
-import org.neo4j.graphdb.index.IndexProvider;
 import org.neo4j.helpers.Service;
 import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.kernel.IdGeneratorFactory;
 import org.neo4j.kernel.InternalAbstractGraphDatabase;
-import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.extension.KernelExtensionFactory;
 import org.neo4j.kernel.impl.cache.CacheProvider;
 import org.neo4j.kernel.impl.nioneo.store.FileSystemAbstraction;
@@ -46,6 +45,8 @@ import org.neo4j.kernel.impl.transaction.xaframework.TransactionInterceptorProvi
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+
+import static org.neo4j.graphdb.factory.GraphDatabaseSettings.use_memory_mapped_buffers;
 import static org.neo4j.helpers.collection.IteratorUtil.count;
 import static org.neo4j.helpers.collection.IteratorUtil.firstOrNull;
 import static org.neo4j.helpers.collection.IteratorUtil.lastOrNull;
@@ -61,7 +62,7 @@ public class BigJumpingStoreIT
         protected TestDatabase( String storeDir, Map<String, String> params )
         {
             super( storeDir, params, Iterables.<Class<?>, Class<?>>iterable( (Class<?>) GraphDatabaseSettings.class )
-                    , Service.load( IndexProvider.class ), Iterables.<KernelExtensionFactory<?>,
+                    , Iterables.<KernelExtensionFactory<?>,
                     KernelExtensionFactory>cast( Service.load( KernelExtensionFactory.class ) ),
                     Service.load( CacheProvider.class ), Service.load( TransactionInterceptorProvider.class ) );
             run();
@@ -71,12 +72,6 @@ public class BigJumpingStoreIT
         protected IdGeneratorFactory createIdGeneratorFactory()
         {
             return new JumpingIdGeneratorFactory( SIZE_PER_JUMP );
-        }
-
-        @Override
-        protected boolean isHighlyAvailable()
-        {
-            return false;
         }
 
         @Override
@@ -102,7 +97,7 @@ public class BigJumpingStoreIT
     private Map<String, String> configForNoMemoryMapping()
     {
         return stringMap(
-                Config.USE_MEMORY_MAPPED_BUFFERS, "false",
+                use_memory_mapped_buffers.name(), "false",
                 "neostore.nodestore.db.mapped_memory", "0M",
                 "neostore.relationshipstore.db.mapped_memory", "0M",
                 "neostore.propertystore.db.mapped_memory", "0M",
@@ -124,7 +119,7 @@ public class BigJumpingStoreIT
     public void crudOnHighIds() throws Exception
     {
         // Create stuff
-        List<Node> nodes = new ArrayList<Node>();
+        List<Node> nodes = new ArrayList<>();
         Transaction tx = db.beginTx();
         int numberOfNodes = SIZE_PER_JUMP * 3;
         String stringValue = "a longer string than short";
@@ -147,6 +142,7 @@ public class BigJumpingStoreIT
         }
 
         tx.success();
+        //noinspection deprecation
         tx.finish();
 
         // Verify
@@ -162,9 +158,10 @@ public class BigJumpingStoreIT
                 assertProperties( map( "number", nodeCount++, "string", stringValue, "array", arrayValue ), node );
                 relCount += count( node.getRelationships( Direction.OUTGOING ) );
             }
-            db.getNodeManager().clearCache();
+            nodeManager().clearCache();
         }
         assertEquals( numberOfRels, relCount );
+        //noinspection deprecation
         tx.finish();
 
         // Remove stuff
@@ -222,6 +219,7 @@ public class BigJumpingStoreIT
             }
         }
         tx.success();
+        //noinspection deprecation
         tx.finish();
 
         // Verify again
@@ -274,9 +272,15 @@ public class BigJumpingStoreIT
                 }
                 nodeCount++;
             }
-            db.getNodeManager().clearCache();
+            nodeManager().clearCache();
         }
+        //noinspection deprecation
         tx.finish();
+    }
+
+    private NodeManager nodeManager()
+    {
+        return db.getDependencyResolver().resolveDependency( NodeManager.class );
     }
 
     private void setPropertyOnAll( Iterable<Relationship> relationships, String key,

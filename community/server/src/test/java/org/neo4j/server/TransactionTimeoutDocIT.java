@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,21 +19,24 @@
  */
 package org.neo4j.server;
 
-import static java.util.Arrays.asList;
-import static org.hamcrest.CoreMatchers.equalTo;
-import static org.hamcrest.MatcherAssert.assertThat;
-import static org.neo4j.helpers.collection.MapUtil.map;
-import static org.neo4j.server.configuration.Configurator.TRANSACTION_TIMEOUT;
-import static org.neo4j.server.helpers.ServerBuilder.server;
-import static org.neo4j.server.rest.transactional.error.StatusCode.INVALID_TRANSACTION_ID;
-
 import java.util.List;
 import java.util.Map;
 
 import org.junit.After;
 import org.junit.Test;
+
 import org.neo4j.test.server.ExclusiveServerTestBase;
 import org.neo4j.test.server.HTTP;
+
+import static java.util.Arrays.asList;
+
+import static org.hamcrest.CoreMatchers.equalTo;
+import static org.hamcrest.MatcherAssert.assertThat;
+
+import static org.neo4j.helpers.collection.MapUtil.map;
+import static org.neo4j.server.configuration.Configurator.TRANSACTION_TIMEOUT;
+import static org.neo4j.server.helpers.CommunityServerBuilder.server;
+import static org.neo4j.server.rest.transactional.error.Status.Transaction.UnknownId;
 
 public class TransactionTimeoutDocIT extends ExclusiveServerTestBase
 {
@@ -55,12 +58,13 @@ public class TransactionTimeoutDocIT extends ExclusiveServerTestBase
         String tx = HTTP.POST( txURI(), asList( map( "statement", "CREATE n" ) ) ).location();
 
         // When
-        Thread.sleep( 1000 * 2 );
+        Thread.sleep( 1000 * 5 );
         Map<String, Object> response = HTTP.POST( tx + "/commit" ).content();
 
         // Then
+        @SuppressWarnings("unchecked")
         List<Map<String, Object>> errors = (List<Map<String, Object>>) response.get( "errors" );
-        assertThat( ((Number) errors.get( 0 ).get( "code" )).intValue(), equalTo( INVALID_TRANSACTION_ID.getCode() ) );
+        assertThat( (String) errors.get( 0 ).get( "code" ), equalTo( UnknownId.code().serialize() ) );
     }
 
     private String txURI()

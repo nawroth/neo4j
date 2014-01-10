@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -40,7 +40,6 @@ import org.neo4j.helpers.Predicate;
 import org.neo4j.helpers.UTF8;
 import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.kernel.impl.nioneo.xa.NeoStoreXaDataSource;
-import org.neo4j.kernel.impl.nioneo.xa.ShutdownXaDataSource;
 import org.neo4j.kernel.impl.transaction.xaframework.XaDataSource;
 import org.neo4j.kernel.impl.transaction.xaframework.XaResource;
 import org.neo4j.kernel.impl.util.StringLogger;
@@ -209,7 +208,7 @@ public class XaDataSourceManager
     {
         if ( isShutdown )
         {
-            return new ShutdownXaDataSource();
+            throw new IllegalStateException( "XaDataSourceManager has been shut down." );
         }
 
         return dataSources.get( name );
@@ -445,11 +444,7 @@ public class XaDataSourceManager
                 participant.rotateLogicalLog();
             }
         }
-        catch ( IOException e )
-        {
-            throw logAndReturn( "TM: recovery failed", new TransactionFailureException( "Recovery failed.", e ) );
-        }
-        catch ( XAException e )
+        catch ( IOException | XAException e )
         {
             throw logAndReturn( "TM: recovery failed", new TransactionFailureException( "Recovery failed.", e ) );
         }

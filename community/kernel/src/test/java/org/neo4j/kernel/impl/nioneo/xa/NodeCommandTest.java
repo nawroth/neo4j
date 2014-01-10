@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -22,6 +22,7 @@ package org.neo4j.kernel.impl.nioneo.xa;
 import java.io.File;
 import java.io.IOException;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 import org.junit.After;
@@ -33,6 +34,7 @@ import org.neo4j.kernel.DefaultIdGeneratorFactory;
 import org.neo4j.kernel.DefaultTxHook;
 import org.neo4j.kernel.configuration.Config;
 import org.neo4j.kernel.impl.nioneo.store.DefaultWindowPoolFactory;
+import org.neo4j.kernel.impl.nioneo.store.DynamicRecord;
 import org.neo4j.kernel.impl.nioneo.store.NodeRecord;
 import org.neo4j.kernel.impl.nioneo.store.NodeStore;
 import org.neo4j.kernel.impl.nioneo.store.StoreFactory;
@@ -42,12 +44,17 @@ import org.neo4j.kernel.impl.util.StringLogger;
 import org.neo4j.test.EphemeralFileSystemRule;
 
 import static java.nio.ByteBuffer.allocate;
+import static java.util.Arrays.asList;
 
 import static org.hamcrest.MatcherAssert.assertThat;
 import static org.hamcrest.core.IsEqual.equalTo;
 
+import static org.neo4j.kernel.impl.nioneo.store.DynamicRecord.dynamicRecord;
+import static org.neo4j.kernel.impl.nioneo.store.ShortArray.LONG;
+import static org.neo4j.kernel.impl.nioneo.store.labels.DynamicNodeLabels.dynamicPointer;
 import static org.neo4j.kernel.impl.nioneo.store.labels.NodeLabelsField.parseLabelsField;
 import static org.neo4j.kernel.impl.nioneo.xa.Command.readCommand;
+import static org.neo4j.kernel.impl.util.IoPrimitiveUtils.safeCastLongToInt;
 
 public class NodeCommandTest
 {
@@ -102,7 +109,7 @@ public class NodeCommandTest
         NodeRecord after = new NodeRecord( 12, 2, 1 );
         after.setInUse( true );
         NodeLabels nodeLabels = parseLabelsField( after );
-        nodeLabels.add( 1337l, nodeStore );
+        nodeLabels.add( 1337, nodeStore );
 
         // When
         assertSerializationWorksFor( new Command.NodeCommand( null, before, after ) );
@@ -127,6 +134,37 @@ public class NodeCommandTest
         assertSerializationWorksFor( new Command.NodeCommand( null, before, after ) );
     }
 
+    @Test
+    public void shouldSerializeDynamicRecordsRemoved() throws Exception
+    {
+        // Given
+        NodeRecord before = new NodeRecord( 12, 1, 2 );
+        before.setInUse( true );
+        List<DynamicRecord> beforeDyn = asList( dynamicRecord( 0, true, true, -1l, LONG.intValue(), new byte[]{1,2,3,4,5,6,7,8}));
+        before.setLabelField( dynamicPointer( beforeDyn ), beforeDyn );
+
+        NodeRecord after = new NodeRecord( 12, 2, 1 );
+        after.setInUse( true );
+        List<DynamicRecord> dynamicRecords = asList( dynamicRecord( 0, false, true, -1l, LONG.intValue(), new byte[]{1,2,3,4,5,6,7,8}));
+        after.setLabelField( dynamicPointer( dynamicRecords ), dynamicRecords );
+
+        // When
+        Command.NodeCommand cmd = new Command.NodeCommand( null, before, after );
+        InMemoryLogBuffer buffer = new InMemoryLogBuffer();
+        cmd.writeToFile( buffer );
+        Command.NodeCommand result = (Command.NodeCommand) readCommand( null, null, buffer, allocate( 64 ) );
+
+        // Then
+        assertThat( result, equalTo( cmd ) );
+        assertThat( result.getMode(), equalTo( cmd.getMode() ) );
+        assertThat( result.getBefore(), equalTo( cmd.getBefore() ) );
+        assertThat( result.getAfter(), equalTo( cmd.getAfter() ) );
+
+        // And dynamic records should be the same
+        assertThat( result.getBefore().getDynamicLabelRecords(), equalTo( cmd.getBefore().getDynamicLabelRecords()));
+        assertThat( result.getAfter().getDynamicLabelRecords(), equalTo( cmd.getAfter().getDynamicLabelRecords() ) );
+    }
+
     private void assertSerializationWorksFor( Command.NodeCommand cmd ) throws IOException
     {
         InMemoryLogBuffer buffer = new InMemoryLogBuffer();
@@ -143,20 +181,26 @@ public class NodeCommandTest
         assertThat( labels( result.getBefore() ), equalTo( labels( cmd.getBefore() ) ) );
         assertThat( labels( result.getAfter() ), equalTo( labels( cmd.getAfter() ) ) );
 
+        // And dynamic records should be the same
+        assertThat( result.getBefore().getDynamicLabelRecords(), equalTo( result.getBefore().getDynamicLabelRecords()));
+        assertThat( result.getAfter().getDynamicLabelRecords(), equalTo( result.getAfter().getDynamicLabelRecords() ) );
     }
 
-    private Set<Long> labels( NodeRecord record )
+    private Set<Integer> labels( NodeRecord record )
     {
         long[] rawLabels = parseLabelsField( record ).get( nodeStore );
-        Set<Long> labels = new HashSet<Long>( rawLabels.length );
+        Set<Integer> labels = new HashSet<>( rawLabels.length );
         for ( long label : rawLabels )
-            labels.add( label );
+        {
+            labels.add( safeCastLongToInt( label ) );
+        }
         return labels;
     }
 
     @Before
     public void before() throws Exception
     {
+        @SuppressWarnings("deprecation")
         StoreFactory storeFactory = new StoreFactory( new Config(), new DefaultIdGeneratorFactory(),
                 new DefaultWindowPoolFactory(), fs.get(), StringLogger.DEV_NULL, new DefaultTxHook() );
         File storeFile = new File( "nodestore" );

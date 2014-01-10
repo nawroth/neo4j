@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -24,23 +24,8 @@ package org.neo4j.com;
  */
 public class TransactionNotPresentOnMasterException extends IllegalStateException
 {
-    public TransactionNotPresentOnMasterException()
+    public TransactionNotPresentOnMasterException( RequestContext txId )
     {
-        super();
-    }
-
-    public TransactionNotPresentOnMasterException( String s )
-    {
-        super( s );
-    }
-
-    public TransactionNotPresentOnMasterException( String message, Throwable cause )
-    {
-        super( message, cause );
-    }
-
-    public TransactionNotPresentOnMasterException( Throwable cause )
-    {
-        super( cause );
+        super( "Transaction " + txId + " not present on master" );
     }
 }

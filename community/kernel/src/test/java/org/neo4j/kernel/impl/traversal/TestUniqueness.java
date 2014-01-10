@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -44,7 +44,7 @@ import static org.neo4j.kernel.Uniqueness.NODE_LEVEL;
 import static org.neo4j.kernel.Uniqueness.RELATIONSHIP_GLOBAL;
 import static org.neo4j.kernel.Uniqueness.RELATIONSHIP_LEVEL;
 
-public class TestUniqueness extends AbstractTestBase
+public class TestUniqueness extends TraversalTestBase
 {
     @Test
     public void nodeLevelUniqueness() throws Exception

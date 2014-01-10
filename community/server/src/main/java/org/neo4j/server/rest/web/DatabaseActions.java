@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -27,6 +27,7 @@ import java.util.Set;
 
 import com.sun.jersey.api.core.HttpContext;
 import org.apache.lucene.search.Sort;
+
 import org.neo4j.graphalgo.CommonEvaluators;
 import org.neo4j.graphalgo.CostEvaluator;
 import org.neo4j.graphalgo.GraphAlgoFactory;
@@ -51,6 +52,7 @@ import org.neo4j.graphdb.index.IndexManager;
 import org.neo4j.graphdb.index.ReadableIndex;
 import org.neo4j.graphdb.index.ReadableRelationshipIndex;
 import org.neo4j.graphdb.index.UniqueFactory;
+import org.neo4j.graphdb.index.UniqueFactory.UniqueEntity;
 import org.neo4j.graphdb.schema.ConstraintCreator;
 import org.neo4j.graphdb.schema.ConstraintDefinition;
 import org.neo4j.graphdb.schema.ConstraintType;
@@ -200,7 +202,7 @@ public class DatabaseActions
 
     public DatabaseRepresentation root()
     {
-        return new DatabaseRepresentation( graphDb );
+        return new DatabaseRepresentation();
     }
 
     // Nodes
@@ -241,13 +243,20 @@ public class DatabaseActions
         node.delete();
     }
 
-    /**
-     * @deprecated reference node is a deprecated concept
-     */
-    @Deprecated
-    public NodeRepresentation getReferenceNode()
+    // Property keys
+
+    public Representation getAllPropertyKeys()
     {
-        return new NodeRepresentation( graphDb.getReferenceNode() );
+        Collection<ValueRepresentation> propKeys = asSet( map( new Function<String, ValueRepresentation>()
+        {
+            @Override
+            public ValueRepresentation apply( String key )
+            {
+                return ValueRepresentation.string( key );
+            }
+        }, GlobalGraphOperations.at( graphDb ).getAllPropertyKeys() ) );
+
+        return new ListRepresentation( RepresentationType.STRING, propKeys );
     }
 
     // Node properties
@@ -483,17 +492,14 @@ public class DatabaseActions
     private AutoIndexer<? extends PropertyContainer> getAutoIndexerForType( String type )
     {
         final IndexManager indexManager = graphDb.index();
-        if ( "node".equals( type ) )
+        switch ( type )
         {
-            return indexManager.getNodeAutoIndexer();
-        }
-        else if ( "relationship".equals( type ) )
-        {
-            return indexManager.getRelationshipAutoIndexer();
-        }
-        else
-        {
-            throw new IllegalArgumentException( "invalid type " + type );
+            case "node":
+                return indexManager.getNodeAutoIndexer();
+            case "relationship":
+                return indexManager.getRelationshipAutoIndexer();
+            default:
+                throw new IllegalArgumentException( "invalid type " + type );
         }
     }
 
@@ -649,31 +655,6 @@ public class DatabaseActions
         if ( relationship.removeProperty( key ) == null )
         {
             throw new NoSuchPropertyException( relationship, key );
-        }
-    }
-
-    // Index
-
-    public enum IndexType
-    {
-        node( "index" )
-                {
-                },
-        relationship( "index" )
-                {
-                };
-        private final String pathPrefix;
-
-        private IndexType( String pathPrefix )
-        {
-            this.pathPrefix = pathPrefix;
-        }
-
-        @SuppressWarnings("boxing")
-        String path( String indexName, String key, String value, long id )
-        {
-            return String.format( "%s/%s/%s/%s/%s", pathPrefix, indexName, key,
-                    value, id );
         }
     }
 
@@ -870,11 +851,9 @@ public class DatabaseActions
         return new ListRepresentation( RepresentationType.RELATIONSHIP, results );
     }
 
-    public Pair<IndexedEntityRepresentation, Boolean> getOrCreateIndexedNode( String indexName, String key,
-                                                                              String value, Long nodeOrNull,
-                                                                              Map<String,
-                                                                                      Object> properties ) throws
-            BadInputException, NodeNotFoundException
+    public Pair<IndexedEntityRepresentation, Boolean> getOrCreateIndexedNode(
+            String indexName, String key, String value, Long nodeOrNull, Map<String, Object> properties )
+            throws BadInputException, NodeNotFoundException
     {
         assertIsLegalIndexName( indexName );
         Node result;
@@ -891,7 +870,11 @@ public class DatabaseActions
             created = result == null;
             if ( created )
             {
-                result = node;
+                UniqueNodeFactory factory = new UniqueNodeFactory( indexName, properties );
+                UniqueEntity<Node> entity = factory.getOrCreateWithOutcome( key, value );
+                // when given a node id, return as created if that node was newly added to the index
+                created = entity.entity().getId() == node.getId() || entity.wasCreated();
+                result = entity.entity();
             }
         }
         else
@@ -904,20 +887,18 @@ public class DatabaseActions
                 }
             }
             UniqueNodeFactory factory = new UniqueNodeFactory( indexName, properties );
-            result = factory.getOrCreate( key, value );
-            created = factory.created;
+            UniqueEntity<Node> entity = factory.getOrCreateWithOutcome( key, value );
+            result = entity.entity();
+            created = entity.wasCreated();
         }
         return Pair.of( new IndexedEntityRepresentation( result, key, value,
                 new NodeIndexRepresentation( indexName, Collections.<String, String>emptyMap() ) ), created );
     }
 
-    public Pair<IndexedEntityRepresentation, Boolean> getOrCreateIndexedRelationship( String indexName, String key,
-                                                                                      String value,
-                                                                                      Long relationshipOrNull,
-                                                                                      Long startNode, String type,
-                                                                                      Long endNode,
-                                                                                      Map<String,
-                                                                                              Object> properties )
+    public Pair<IndexedEntityRepresentation, Boolean> getOrCreateIndexedRelationship(
+            String indexName, String key, String value,
+            Long relationshipOrNull, Long startNode, String type, Long endNode,
+            Map<String, Object> properties )
             throws BadInputException, RelationshipNotFoundException, NodeNotFoundException
     {
         assertIsLegalIndexName( indexName );
@@ -934,7 +915,13 @@ public class DatabaseActions
             result = graphDb.index().forRelationships( indexName ).putIfAbsent( relationship, key, value );
             if ( created = result == null )
             {
-                result = relationship;
+                UniqueRelationshipFactory factory =
+                        new UniqueRelationshipFactory( indexName, relationship.getStartNode(),
+                                relationship.getEndNode(), relationship.getType().name(), properties );
+                UniqueEntity<Relationship> entity = factory.getOrCreateWithOutcome( key, value );
+                // when given a relationship id, return as created if that relationship was newly added to the index
+                created = entity.entity().getId() == relationship.getId() || entity.wasCreated();
+                result = entity.entity();
             }
         }
         else if ( startNode == null || type == null || endNode == null )
@@ -944,10 +931,11 @@ public class DatabaseActions
         }
         else
         {
-            UniqueRelationshipFactory factory = new UniqueRelationshipFactory( indexName, node( startNode ),
-                    node( endNode ), type, properties );
-            result = factory.getOrCreate( key, value );
-            created = factory.created;
+            UniqueRelationshipFactory factory =
+                new UniqueRelationshipFactory( indexName, node( startNode ), node( endNode ), type, properties );
+            UniqueEntity<Relationship> entity = factory.getOrCreateWithOutcome( key, value );
+            result = entity.entity();
+            created = entity.wasCreated();
         }
         return Pair.of( new IndexedEntityRepresentation( result, key, value,
                 new RelationshipIndexRepresentation( indexName, Collections.<String, String>emptyMap() ) ),
@@ -959,7 +947,6 @@ public class DatabaseActions
         private final Node start, end;
         private final RelationshipType type;
         private final Map<String, Object> properties;
-        boolean created;
 
         UniqueRelationshipFactory( String index, Node start, Node end, String type, Map<String, Object> properties )
         {
@@ -983,14 +970,12 @@ public class DatabaseActions
             {
                 relationship.setProperty( property.getKey(), property.getValue() );
             }
-            this.created = true;
         }
     }
 
     private class UniqueNodeFactory extends UniqueFactory.UniqueNodeFactory
     {
         private final Map<String, Object> properties;
-        boolean created;
 
         UniqueNodeFactory( String index, Map<String, Object> properties )
         {
@@ -1005,7 +990,6 @@ public class DatabaseActions
             {
                 node.setProperty( property.getKey(), property.getValue() );
             }
-            this.created = true;
         }
     }
 
@@ -1404,7 +1388,7 @@ public class DatabaseActions
         @Override
         public PathRepresentation<Path> from( Path path )
         {
-            return new PathRepresentation<Path>( path );
+            return new PathRepresentation<>( path );
         }
     };
 
@@ -1483,6 +1467,21 @@ public class DatabaseActions
         return new IndexDefinitionRepresentation( indexCreator.create() );
     }
 
+    public ListRepresentation getSchemaIndexes()
+    {
+        Iterable<IndexDefinition> definitions = graphDb.schema().getIndexes();
+        Iterable<IndexDefinitionRepresentation> representations = map( new Function<IndexDefinition,
+                IndexDefinitionRepresentation>()
+        {
+            @Override
+            public IndexDefinitionRepresentation apply( IndexDefinition definition )
+            {
+                return new IndexDefinitionRepresentation( definition );
+            }
+        }, definitions );
+        return new ListRepresentation( RepresentationType.INDEX_DEFINITION, representations );
+    }
+
     public ListRepresentation getSchemaIndexes( String labelName )
     {
         Iterable<IndexDefinition> definitions = graphDb.schema().getIndexes( label( labelName ) );
@@ -1517,10 +1516,10 @@ public class DatabaseActions
     public ConstraintDefinitionRepresentation createPropertyUniquenessConstraint( String labelName,
                                                                                   Iterable<String> propertyKeys )
     {
-        ConstraintCreator constraintCreator = graphDb.schema().constraintFor( label( labelName ) ).unique();
+        ConstraintCreator constraintCreator = graphDb.schema().constraintFor( label( labelName ) );
         for ( String key : propertyKeys )
         {
-            constraintCreator = constraintCreator.on( key );
+            constraintCreator = constraintCreator.assertPropertyIsUnique( key );
         }
         ConstraintDefinition constraintDefinition = constraintCreator.create();
         return new ConstraintDefinitionRepresentation( constraintDefinition );
@@ -1551,7 +1550,7 @@ public class DatabaseActions
         else
         {
             throw new IllegalArgumentException(
-                    String.format( "Constraint with label %s for properties %s already exists", labelName,
+                    String.format( "Constraint with label %s for properties %s does not exist", labelName,
                             propertyKeys ) );
         }
     }
@@ -1563,10 +1562,15 @@ public class DatabaseActions
         return filter( filter, constraints );
     }
 
-    private Iterable<ConstraintDefinition> filteredConstraints( String labelName, ConstraintType type )
+    private Iterable<ConstraintDefinition> filteredConstraints( String labelName, final ConstraintType type )
     {
-        Iterable<ConstraintDefinition> constraints = graphDb.schema().getConstraints( label( labelName ) );
-        return type.filter( constraints );
+        return filter(new Predicate<ConstraintDefinition>(){
+            @Override
+            public boolean accept( ConstraintDefinition item )
+            {
+                return item.isConstraintType( type );
+            }
+        }, graphDb.schema().getConstraints( label( labelName ) ) );
     }
 
     private Predicate<ConstraintDefinition> propertyUniquenessFilter( final Set<String> propertyKeysSet )
@@ -1577,7 +1581,7 @@ public class DatabaseActions
             public boolean accept( ConstraintDefinition item )
             {
                 return item.isConstraintType( ConstraintType.UNIQUENESS ) &&
-                        propertyKeysSet.equals( asSet( item.asUniquenessConstraint().getPropertyKeys() ) );
+                        propertyKeysSet.equals( asSet( item.getPropertyKeys() ) );
             }
         };
     }

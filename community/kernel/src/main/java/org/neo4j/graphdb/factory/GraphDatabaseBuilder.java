@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -117,6 +117,7 @@ public class GraphDatabaseBuilder
      * Set a map of config settings into the builder. Overwrites any existing values.
      *
      * @return the builder
+     * @deprecated Use setConfig with explicit {@link Setting} instead
      */
     @SuppressWarnings("deprecation")
     public GraphDatabaseBuilder setConfig( Map<String, String> config )

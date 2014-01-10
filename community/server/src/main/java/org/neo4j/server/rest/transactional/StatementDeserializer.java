@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -31,10 +31,11 @@ import org.codehaus.jackson.JsonFactory;
 import org.codehaus.jackson.JsonParseException;
 import org.codehaus.jackson.JsonParser;
 import org.codehaus.jackson.JsonToken;
+import org.codehaus.jackson.map.JsonMappingException;
 
 import org.neo4j.helpers.collection.PrefetchingIterator;
 import org.neo4j.server.rest.transactional.error.Neo4jError;
-import org.neo4j.server.rest.transactional.error.StatusCode;
+import org.neo4j.server.rest.transactional.error.Status;
 
 import static java.util.Arrays.asList;
 import static java.util.Collections.unmodifiableMap;
@@ -105,6 +106,7 @@ public class StatementDeserializer extends PrefetchingIterator<Statement>
                     String statement = null;
                     Map<String, Object> parameters = null;
                     List<Object> resultsDataContents = null;
+                    boolean includeStats = false;
                     JsonToken tok;
 
                     while ( (tok = input.nextToken()) != null && tok != END_OBJECT )
@@ -116,12 +118,12 @@ public class StatementDeserializer extends PrefetchingIterator<Statement>
                             return null;
                         }
 
-                        input.nextToken();
+                        input.nextValue();
                         String currentName = input.getCurrentName();
                         switch ( currentName )
                         {
                         case "statement":
-                            statement = input.nextTextValue();
+                            statement = input.readValueAs( String.class );
                             break;
                         case "parameters":
                             parameters = readMap( input );
@@ -129,15 +131,20 @@ public class StatementDeserializer extends PrefetchingIterator<Statement>
                         case "resultDataContents":
                             resultsDataContents = readArray( input );
                             break;
+                        case "includeStats":
+                            includeStats = input.getBooleanValue();
+                            break;
+                        default:
+                            discardValue( input );
                         }
                     }
 
                     if ( statement == null )
                     {
-                        addError( new Neo4jError( StatusCode.INVALID_REQUEST_FORMAT, new DeserializationException( "No statement provided." ) ) );
+                        addError( new Neo4jError( Status.Request.InvalidFormat, new DeserializationException( "No statement provided." ) ) );
                         return null;
                     }
-                    return new Statement( statement, parameters == null ? NO_PARAMETERS : parameters,
+                    return new Statement( statement, parameters == null ? NO_PARAMETERS : parameters, includeStats,
                                           ResultDataContent.fromNames( resultsDataContents ) );
 
 
@@ -146,17 +153,28 @@ public class StatementDeserializer extends PrefetchingIterator<Statement>
             }
             return null;
         }
-        catch ( JsonParseException e )
+        catch ( JsonParseException | JsonMappingException e )
         {
-            addError( new Neo4jError( StatusCode.INVALID_REQUEST_FORMAT,
+            addError( new Neo4jError( Status.Request.InvalidFormat,
                         new DeserializationException( "Unable to deserialize request", e ) ) );
             return null;
         }
         catch ( IOException e )
         {
-            addError( new Neo4jError( StatusCode.NETWORK_ERROR, e ) );
+            addError( new Neo4jError( Status.Network.UnknownFailure, e ) );
             return null;
         }
+        catch ( Exception e)
+        {
+            addError( new Neo4jError( Status.General.UnknownFailure, e ) );
+            return null;
+        }
+    }
+
+    private void discardValue( JsonParser input ) throws IOException
+    {
+        // This could be done without building up an object
+        input.readValueAs( Object.class );
     }
 
     @SuppressWarnings("unchecked")
@@ -197,7 +215,7 @@ public class StatementDeserializer extends PrefetchingIterator<Statement>
             if ( token == FIELD_NAME && !expectedField.equals( input.getText() ) )
             {
                 addError( new Neo4jError(
-                        StatusCode.INVALID_REQUEST_FORMAT,
+                        Status.Request.InvalidFormat,
                         new DeserializationException( String.format( "Unable to deserialize request. " +
                                                                      "Expected first field to be '%s', but was '%s'.",
                                                                      expectedField, input.getText() ) ) ) );
@@ -208,7 +226,7 @@ public class StatementDeserializer extends PrefetchingIterator<Statement>
         if ( !expectedTokens.equals( foundTokens ) )
         {
             addError( new Neo4jError(
-                    StatusCode.INVALID_REQUEST_FORMAT,
+                    Status.Request.InvalidFormat,
                     new DeserializationException( String.format( "Unable to deserialize request. " +
                             "Expected %s, found %s.", expectedTokens, foundTokens ) ) ) );
             return false;

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,24 +19,20 @@
  */
 package org.neo4j.kernel.impl.core;
 
-import java.util.ArrayList;
 import java.util.Collection;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.LinkedList;
 import java.util.List;
-import java.util.Map;
 import java.util.Set;
 
 import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.NotFoundException;
 import org.neo4j.graphdb.PropertyContainer;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
 import org.neo4j.graphdb.index.Index;
-import org.neo4j.helpers.Pair;
 import org.neo4j.helpers.Predicate;
 import org.neo4j.helpers.ThisShouldNotHappenError;
 import org.neo4j.helpers.Triplet;
@@ -45,13 +41,14 @@ import org.neo4j.helpers.collection.FilteringIterator;
 import org.neo4j.helpers.collection.IteratorWrapper;
 import org.neo4j.helpers.collection.PrefetchingIterator;
 import org.neo4j.kernel.PropertyTracker;
-import org.neo4j.kernel.ThreadToStatementContextBridge;
+import org.neo4j.kernel.api.properties.DefinedProperty;
+import org.neo4j.kernel.impl.cache.AutoLoadingCache;
 import org.neo4j.kernel.impl.cache.Cache;
 import org.neo4j.kernel.impl.cache.CacheProvider;
-import org.neo4j.kernel.impl.cache.LockStripedCache;
+import org.neo4j.kernel.impl.nioneo.store.NeoStore;
 import org.neo4j.kernel.impl.nioneo.store.NodeRecord;
-import org.neo4j.kernel.impl.nioneo.store.PropertyData;
 import org.neo4j.kernel.impl.nioneo.store.RelationshipRecord;
+import org.neo4j.kernel.impl.nioneo.store.TokenStore;
 import org.neo4j.kernel.impl.nioneo.xa.NeoStoreXaDataSource;
 import org.neo4j.kernel.impl.persistence.EntityIdGenerator;
 import org.neo4j.kernel.impl.persistence.PersistenceManager;
@@ -62,23 +59,19 @@ import org.neo4j.kernel.impl.transaction.xaframework.XaDataSource;
 import org.neo4j.kernel.impl.util.ArrayMap;
 import org.neo4j.kernel.impl.util.RelIdArray;
 import org.neo4j.kernel.impl.util.RelIdArray.DirectionWrapper;
-import org.neo4j.kernel.impl.util.RelIdArrayWithLoops;
 import org.neo4j.kernel.impl.util.StringLogger;
 import org.neo4j.kernel.lifecycle.Lifecycle;
 
 import static java.lang.String.format;
 import static java.util.Arrays.asList;
-
 import static org.neo4j.helpers.collection.Iterables.cast;
 
 public class NodeManager implements Lifecycle, EntityFactory
 {
-    private long referenceNodeId = 0;
-
     private final StringLogger logger;
     private final GraphDatabaseService graphDbService;
-    private final LockStripedCache<NodeImpl> nodeCache;
-    private final LockStripedCache<RelationshipImpl> relCache;
+    private final AutoLoadingCache<NodeImpl> nodeCache;
+    private final AutoLoadingCache<RelationshipImpl> relCache;
     private final CacheProvider cacheProvider;
     private final AbstractTransactionManager transactionManager;
     private final PropertyKeyTokenHolder propertyKeyTokenHolder;
@@ -92,13 +85,14 @@ public class NodeManager implements Lifecycle, EntityFactory
     private final NodeProxy.NodeLookup nodeLookup;
     private final RelationshipProxy.RelationshipLookups relationshipLookups;
 
+    private final RelationshipLoader relationshipLoader;
+
     private final List<PropertyTracker<Node>> nodePropertyTrackers;
     private final List<PropertyTracker<Relationship>> relationshipPropertyTrackers;
 
-    private static final int LOCK_STRIPE_COUNT = 32;
     private GraphPropertiesImpl graphProperties;
 
-    private final LockStripedCache.Loader<NodeImpl> nodeLoader = new LockStripedCache.Loader<NodeImpl>()
+    private final AutoLoadingCache.Loader<NodeImpl> nodeLoader = new AutoLoadingCache.Loader<NodeImpl>()
     {
         @Override
         public NodeImpl loadById( long id )
@@ -112,7 +106,7 @@ public class NodeManager implements Lifecycle, EntityFactory
         }
     };
 
-    private final LockStripedCache.Loader<RelationshipImpl> relLoader = new LockStripedCache.Loader<RelationshipImpl>()
+    private final AutoLoadingCache.Loader<RelationshipImpl> relLoader = new AutoLoadingCache.Loader<RelationshipImpl>()
     {
         @Override
         public RelationshipImpl loadById( long id )
@@ -125,7 +119,7 @@ public class NodeManager implements Lifecycle, EntityFactory
             int typeId = data.getType();
             final long startNodeId = data.getFirstNode();
             final long endNodeId = data.getSecondNode();
-            return newRelationshipImpl( id, startNodeId, endNodeId, typeId, false );
+            return new RelationshipImpl( id, startNodeId, endNodeId, typeId, false );
         }
     };
 
@@ -151,11 +145,12 @@ public class NodeManager implements Lifecycle, EntityFactory
 
         this.cacheProvider = cacheProvider;
         this.statementCtxProvider = statementCtxProvider;
-        this.nodeCache = new LockStripedCache<NodeImpl>( nodeCache, LOCK_STRIPE_COUNT, nodeLoader );
-        this.relCache = new LockStripedCache<RelationshipImpl>( relCache, LOCK_STRIPE_COUNT, relLoader );
+        this.nodeCache = new AutoLoadingCache<>( nodeCache, nodeLoader );
+        this.relCache = new AutoLoadingCache<>( relCache, relLoader );
         this.xaDsm = xaDsm;
-        nodePropertyTrackers = new LinkedList<PropertyTracker<Node>>();
-        relationshipPropertyTrackers = new LinkedList<PropertyTracker<Relationship>>();
+        nodePropertyTrackers = new LinkedList<>();
+        relationshipPropertyTrackers = new LinkedList<>();
+        this.relationshipLoader = new RelationshipLoader( persistenceManager, relCache );
         this.graphProperties = instantiateGraphProperties();
     }
 
@@ -171,7 +166,7 @@ public class NodeManager implements Lifecycle, EntityFactory
 
     @Override
     public void init()
-    {
+    {   // Nothing to initialize
     }
 
     @Override
@@ -181,10 +176,15 @@ public class NodeManager implements Lifecycle, EntityFactory
         {
             if ( ds.getName().equals( NeoStoreXaDataSource.DEFAULT_DATA_SOURCE_NAME ) )
             {
-                // Load and cache all keys from persistence manager
-                addRawRelationshipTypes( persistenceManager.loadAllRelationshipTypeTokens() );
-                addPropertyKeyTokens( persistenceManager.loadAllPropertyKeyTokens() );
-                addLabelTokens( persistenceManager.loadAllLabelTokens() );
+                NeoStore neoStore = ((NeoStoreXaDataSource) ds).getNeoStore();
+
+                TokenStore<?> propTokens = neoStore.getPropertyStore().getPropertyKeyTokenStore();
+                TokenStore<?> labelTokens = neoStore.getLabelTokenStore();
+                TokenStore<?> relTokens = neoStore.getRelationshipTypeStore();
+
+                addRawRelationshipTypes( relTokens.getTokens( Integer.MAX_VALUE ) );
+                addPropertyKeyTokens( propTokens.getTokens( Integer.MAX_VALUE ) );
+                addLabelTokens( labelTokens.getTokens( Integer.MAX_VALUE ) );
             }
         }
     }
@@ -206,14 +206,8 @@ public class NodeManager implements Lifecycle, EntityFactory
 
     public Node createNode()
     {
-        return createNode( null );
-    }
-
-    public Node createNode( Label[] labels )
-    {
         long id = idGenerator.nextId( Node.class );
-        NodeImpl node = new NodeImpl( id,
-                true );
+        NodeImpl node = new NodeImpl( id, true );
         NodeProxy proxy = new NodeProxy( id, nodeLookup, statementCtxProvider );
         TransactionState transactionState = getTransactionState();
         transactionState.acquireWriteLock( proxy );
@@ -222,14 +216,6 @@ public class NodeManager implements Lifecycle, EntityFactory
         {
             persistenceManager.nodeCreate( id );
             transactionState.createNode( id );
-            if ( labels != null )
-            {
-                for ( Label label : labels )
-                {
-                    proxy.addLabel( label );
-                }
-            }
-
             nodeCache.put( node );
             success = true;
             return proxy;
@@ -250,15 +236,15 @@ public class NodeManager implements Lifecycle, EntityFactory
     }
 
     public Relationship createRelationship( Node startNodeProxy, NodeImpl startNode, Node endNode,
-                                            RelationshipType type )
+                                            long relationshipTypeId )
     {
-        if ( startNode == null || endNode == null || type == null )
+        if ( startNode == null || endNode == null || relationshipTypeId > Integer.MAX_VALUE )
         {
-            throw new IllegalArgumentException( "Null parameter, startNode="
-                    + startNode + ", endNode=" + endNode + ", type=" + type );
+            throw new IllegalArgumentException( "Bad parameter, startNode="
+                    + startNode + ", endNode=" + endNode + ", typeId=" + relationshipTypeId );
         }
 
-        int typeId = relTypeHolder.getOrCreateId( type.name() );
+        int typeId = (int)relationshipTypeId;
         long startNodeId = startNode.getId();
         long endNodeId = endNode.getId();
         NodeImpl secondNode = getLightNode( endNodeId );
@@ -269,7 +255,7 @@ public class NodeManager implements Lifecycle, EntityFactory
                     + "] deleted" );
         }
         long id = idGenerator.nextId( Relationship.class );
-        RelationshipImpl rel = newRelationshipImpl( id, startNodeId, endNodeId, typeId, true );
+        RelationshipImpl rel = new RelationshipImpl( id, startNodeId, endNodeId, typeId, true );
         RelationshipProxy proxy = new RelationshipProxy( id, relationshipLookups, statementCtxProvider );
         TransactionState tx = getTransactionState();
         tx.acquireWriteLock( proxy );
@@ -303,11 +289,6 @@ public class NodeManager implements Lifecycle, EntityFactory
         }
     }
 
-    private RelationshipImpl newRelationshipImpl( long id, long startNodeId, long endNodeId, int typeId, boolean newRel)
-    {
-        return new RelationshipImpl( id, startNodeId, endNodeId, typeId, newRel );
-    }
-
     public Node getNodeByIdOrNull( long nodeId )
     {
         transactionManager.assertInTransaction();
@@ -336,7 +317,6 @@ public class NodeManager implements Lifecycle, EntityFactory
         return new RelationshipProxy( id, relationshipLookups, statementCtxProvider );
     }
 
-    @SuppressWarnings("unchecked")
     public Iterator<Node> getAllNodes()
     {
         Iterator<Node> committedNodes = new PrefetchingIterator<Node>()
@@ -390,10 +370,10 @@ public class NodeManager implements Lifecycle, EntityFactory
          * this transaction. The thing with the cache is that stuff can be evicted at any point in time
          * so we can't rely on created nodes to be there during the whole life time of this iterator.
          * That's why we filter them out from the "committed/cache" iterator and add them at the end instead.*/
-        final Set<Long> createdNodes = new HashSet<Long>( txState.getCreatedNodes() );
+        final Set<Long> createdNodes = new HashSet<>( txState.getCreatedNodes() );
         if ( !createdNodes.isEmpty() )
         {
-            committedNodes = new FilteringIterator<Node>( committedNodes, new Predicate<Node>()
+            committedNodes = new FilteringIterator<>( committedNodes, new Predicate<Node>()
             {
                 @Override
                 public boolean accept( Node node )
@@ -404,7 +384,7 @@ public class NodeManager implements Lifecycle, EntityFactory
         }
 
         // Filter out nodes deleted in this transaction
-        Iterator<Node> filteredRemovedNodes = new FilteringIterator<Node>( committedNodes, new Predicate<Node>()
+        Iterator<Node> filteredRemovedNodes = new FilteringIterator<>( committedNodes, new Predicate<Node>()
         {
             @Override
             public boolean accept( Node node )
@@ -414,7 +394,7 @@ public class NodeManager implements Lifecycle, EntityFactory
         } );
 
         // Append nodes created in this transaction
-        return new CombiningIterator<Node>( asList( filteredRemovedNodes,
+        return new CombiningIterator<>( asList( filteredRemovedNodes,
                 new IteratorWrapper<Node, Long>( createdNodes.iterator() )
                 {
                     @Override
@@ -425,6 +405,14 @@ public class NodeManager implements Lifecycle, EntityFactory
                 } ) );
     }
 
+    /**
+     * TODO: We only grab this lock in one single place, from inside the kernel:
+     * {@link org.neo4j.kernel.impl.api.DefaultLegacyKernelOperations#relationshipCreate(org.neo4j.kernel.api.Statement, long, long, long)}.
+     * We should move that code around such that this lock is grabbed through the locking layer in the kernel cake, and
+     * then we should remove this locking code. It is dangerous to have it here, because it allows grabbing a lock
+     * before the kernel is registered as a data source. If that happens in HA, we will attempt to grab locks on the
+     * master before the transaction is started on the master.
+     */
     public NodeImpl getNodeForProxy( long nodeId, LockType lock )
     {
         if ( lock != null )
@@ -437,20 +425,6 @@ public class NodeManager implements Lifecycle, EntityFactory
             throw new NotFoundException( format( "Node %d not found", nodeId ) );
         }
         return node;
-    }
-
-    public Node getReferenceNode() throws NotFoundException
-    {
-        if ( referenceNodeId == -1 )
-        {
-            throw new NotFoundException( "No reference node set" );
-        }
-        return getNodeById( referenceNodeId );
-    }
-
-    public void setReferenceNodeId( long nodeId )
-    {
-        this.referenceNodeId = nodeId;
     }
 
     protected Relationship getRelationshipByIdOrNull( long relId )
@@ -523,10 +497,10 @@ public class NodeManager implements Lifecycle, EntityFactory
          * this transaction. The thing with the cache is that stuff can be evicted at any point in time
          * so we can't rely on created relationships to be there during the whole life time of this iterator.
          * That's why we filter them out from the "committed/cache" iterator and add them at the end instead.*/
-        final Set<Long> createdRelationships = new HashSet<Long>( txState.getCreatedRelationships() );
+        final Set<Long> createdRelationships = new HashSet<>( txState.getCreatedRelationships() );
         if ( !createdRelationships.isEmpty() )
         {
-            committedRelationships = new FilteringIterator<Relationship>( committedRelationships,
+            committedRelationships = new FilteringIterator<>( committedRelationships,
                     new Predicate<Relationship>()
                     {
                         @Override
@@ -539,7 +513,7 @@ public class NodeManager implements Lifecycle, EntityFactory
 
         // Filter out relationships deleted in this transaction
         Iterator<Relationship> filteredRemovedRelationships =
-                new FilteringIterator<Relationship>( committedRelationships, new Predicate<Relationship>()
+                new FilteringIterator<>( committedRelationships, new Predicate<Relationship>()
                 {
                     @Override
                     public boolean accept( Relationship relationship )
@@ -549,7 +523,7 @@ public class NodeManager implements Lifecycle, EntityFactory
                 } );
 
         // Append relationships created in this transaction
-        return new CombiningIterator<Relationship>( asList( filteredRemovedRelationships,
+        return new CombiningIterator<>( asList( filteredRemovedRelationships,
                 new IteratorWrapper<Relationship, Long>( createdRelationships.iterator() )
                 {
                     @Override
@@ -565,13 +539,8 @@ public class NodeManager implements Lifecycle, EntityFactory
         return relTypeHolder.getTokenById( id );
     }
 
-    public RelationshipImpl getRelationshipForProxy( long relId, LockType lock )
+    public RelationshipImpl getRelationshipForProxy( long relId )
     {
-        if ( lock != null )
-        {
-            lock.acquire( getTransactionState(),
-                    new RelationshipProxy( relId, relationshipLookups, statementCtxProvider ) );
-        }
         RelationshipImpl rel = relCache.get( relId );
         if ( rel == null )
         {
@@ -606,86 +575,9 @@ public class NodeManager implements Lifecycle, EntityFactory
         }
     }
 
-    Object nodeLoadPropertyValue( long nodeId, int propertyKey )
-    {
-        return persistenceManager.nodeLoadPropertyValue( nodeId, propertyKey );
-    }
-
-    Object relationshipLoadPropertyValue( long relationshipId, int propertyKey )
-    {
-        return persistenceManager.relationshipLoadPropertyValue( relationshipId, propertyKey );
-    }
-
-    Object graphLoadPropertyValue( int propertyKey )
-    {
-        return persistenceManager.graphLoadPropertyValue( propertyKey );
-    }
-
     long getRelationshipChainPosition( NodeImpl node )
     {
         return persistenceManager.getRelationshipChainPosition( node.getId() );
-    }
-
-    Triplet<ArrayMap<Integer, RelIdArray>, List<RelationshipImpl>, Long> getMoreRelationships( NodeImpl node )
-    {
-        long nodeId = node.getId();
-        long position = node.getRelChainPosition();
-        Pair<Map<DirectionWrapper, Iterable<RelationshipRecord>>, Long> rels =
-                persistenceManager.getMoreRelationships( nodeId, position );
-        ArrayMap<Integer, RelIdArray> newRelationshipMap =
-                new ArrayMap<Integer, RelIdArray>();
-
-        List<RelationshipImpl> relsList = new ArrayList<RelationshipImpl>( 150 );
-
-        Iterable<RelationshipRecord> loops = rels.first().get( DirectionWrapper.BOTH );
-        boolean hasLoops = loops != null;
-        if ( hasLoops )
-        {
-            populateLoadedRelationships( loops, relsList, DirectionWrapper.BOTH, true, newRelationshipMap );
-        }
-        populateLoadedRelationships( rels.first().get( DirectionWrapper.OUTGOING ), relsList,
-                DirectionWrapper.OUTGOING, hasLoops,
-                newRelationshipMap
-        );
-        populateLoadedRelationships( rels.first().get( DirectionWrapper.INCOMING ), relsList,
-                DirectionWrapper.INCOMING, hasLoops,
-                newRelationshipMap
-        );
-
-        return Triplet.of( newRelationshipMap, relsList, rels.other() );
-    }
-
-    /**
-     * @param loadedRelationshipsOutputParameter
-     *         This is the return value for this method. It's written like this
-     *         because several calls to this method are used to gradually build up
-     *         the map of RelIdArrays that are ultimately involved in the operation.
-     */
-    private void populateLoadedRelationships( Iterable<RelationshipRecord> loadedRelationshipRecords,
-                                              List<RelationshipImpl> relsList,
-                                              DirectionWrapper dir,
-                                              boolean hasLoops,
-                                              ArrayMap<Integer, RelIdArray> loadedRelationshipsOutputParameter )
-    {
-        for ( RelationshipRecord rel : loadedRelationshipRecords )
-        {
-            long relId = rel.getId();
-            RelationshipImpl relImpl = getOrCreateRelationshipFromCache( relsList, rel, relId );
-
-            getOrCreateRelationships( hasLoops, relImpl.getTypeId(), loadedRelationshipsOutputParameter )
-                    .add( relId, dir );
-        }
-    }
-
-    private RelIdArray getOrCreateRelationships( boolean hasLoops, int typeId, ArrayMap<Integer, RelIdArray> loadedRelationships )
-    {
-        RelIdArray relIdArray = loadedRelationships.get( typeId );
-        if ( relIdArray == null )
-        {
-            relIdArray = hasLoops ? new RelIdArrayWithLoops( typeId ) : new RelIdArray( typeId );
-            loadedRelationships.put( typeId, relIdArray );
-        }
-        return relIdArray;
     }
 
     void putAllInRelCache( Collection<RelationshipImpl> relationships )
@@ -693,32 +585,25 @@ public class NodeManager implements Lifecycle, EntityFactory
         relCache.putAll( relationships );
     }
 
-    private RelationshipImpl getOrCreateRelationshipFromCache( List<RelationshipImpl> newlyCreatedRelationships,
-                                                               RelationshipRecord rel, long relId )
+    Iterator<DefinedProperty> loadGraphProperties( boolean light )
     {
-        RelationshipImpl relImpl = relCache.get( relId );
-        if ( relImpl == null )
-        {
-            newlyCreatedRelationships.add( relImpl );
-            relImpl = newRelationshipImpl( relId, rel.getFirstNode(), rel.getSecondNode(), rel.getType(), false );
-        }
-        return relImpl;
+        IteratingPropertyReceiver receiver = new IteratingPropertyReceiver();
+        persistenceManager.graphLoadProperties( light, receiver );
+        return receiver;
     }
 
-    ArrayMap<Integer, PropertyData> loadGraphProperties( boolean light )
+    Iterator<DefinedProperty> loadProperties( NodeImpl node, boolean light )
     {
-        return persistenceManager.graphLoadProperties( light );
+        IteratingPropertyReceiver receiver = new IteratingPropertyReceiver();
+        persistenceManager.loadNodeProperties( node.getId(), light, receiver );
+        return receiver;
     }
 
-    ArrayMap<Integer, PropertyData> loadProperties( NodeImpl node, boolean light )
+    Iterator<DefinedProperty> loadProperties( RelationshipImpl relationship, boolean light )
     {
-        return persistenceManager.loadNodeProperties( node.getId(), light );
-    }
-
-    ArrayMap<Integer, PropertyData> loadProperties(
-            RelationshipImpl relationship, boolean light )
-    {
-        return persistenceManager.loadRelProperties( relationship.getId(), light );
+        IteratingPropertyReceiver receiver = new IteratingPropertyReceiver();
+        persistenceManager.loadRelProperties( relationship.getId(), light, receiver );
+        return receiver;
     }
 
     public void clearCache()
@@ -728,7 +613,6 @@ public class NodeManager implements Lifecycle, EntityFactory
         graphProperties = instantiateGraphProperties();
     }
 
-    @SuppressWarnings("unchecked")
     public Iterable<? extends Cache<?>> caches()
     {
         return asList( nodeCache, relCache );
@@ -744,7 +628,7 @@ public class NodeManager implements Lifecycle, EntityFactory
         {
             // this exception always get generated in a finally block and
             // when it happens another exception has already been thrown
-            // (most likley NotInTransactionException)
+            // (most likely NotInTransactionException)
             logger.debug( "Failed to set transaction rollback only", e );
         }
         catch ( javax.transaction.SystemException se )
@@ -811,7 +695,7 @@ public class NodeManager implements Lifecycle, EntityFactory
         return propertyKeyTokenHolder.getTokenByNameOrNull( key );
     }
 
-    int getRelationshipTypeIdFor( RelationshipType type ) throws TokenNotFoundException
+    int getRelationshipTypeIdFor( RelationshipType type )
     {
         return relTypeHolder.getIdByName( type.name() );
     }
@@ -826,14 +710,14 @@ public class NodeManager implements Lifecycle, EntityFactory
         return cast( relTypeHolder.getAllTokens() );
     }
 
-    public ArrayMap<Integer, PropertyData> deleteNode( NodeImpl node, TransactionState tx )
+    public ArrayMap<Integer, DefinedProperty> deleteNode( NodeImpl node, TransactionState tx )
     {
         tx.deleteNode( node.getId() );
         return persistenceManager.nodeDelete( node.getId() );
         // remove from node cache done via event
     }
 
-    public ArrayMap<Integer, PropertyData> deleteRelationship( RelationshipImpl rel, TransactionState tx )
+    public ArrayMap<Integer, DefinedProperty> deleteRelationship( RelationshipImpl rel, TransactionState tx )
     {
         NodeImpl startNode;
         NodeImpl endNode;
@@ -856,11 +740,10 @@ public class NodeManager implements Lifecycle, EntityFactory
             // no need to load full relationship, all properties will be
             // deleted when relationship is deleted
 
-            ArrayMap<Integer,PropertyData> skipMap =
-                tx.getOrCreateCowPropertyRemoveMap( rel );
+            ArrayMap<Integer,DefinedProperty> skipMap = tx.getOrCreateCowPropertyRemoveMap( rel );
 
             tx.deleteRelationship( rel.getId() );
-            ArrayMap<Integer,PropertyData> removedProps = persistenceManager.relDelete( rel.getId() );
+            ArrayMap<Integer,DefinedProperty> removedProps = persistenceManager.relDelete( rel.getId() );
 
             if ( removedProps.size() > 0 )
             {
@@ -891,6 +774,11 @@ public class NodeManager implements Lifecycle, EntityFactory
         }
     }
 
+    public Triplet<ArrayMap<Integer, RelIdArray>, List<RelationshipImpl>, Long> getMoreRelationships( NodeImpl node )
+    {
+        return relationshipLoader.getMoreRelationships( node );
+    }
+
     public NodeImpl getNodeIfCached( long nodeId )
     {
         return nodeCache.getIfCached( nodeId );
@@ -916,12 +804,12 @@ public class NodeManager implements Lifecycle, EntityFactory
         propertyKeyTokenHolder.addTokens( index );
     }
 
-    public String getKeyForProperty( PropertyData property )
+    public String getKeyForProperty( DefinedProperty property )
     {
         // int keyId = persistenceManager.getKeyIdForProperty( property );
         try
         {
-            return propertyKeyTokenHolder.getTokenById( property.getIndex() ).name();
+            return propertyKeyTokenHolder.getTokenById( property.propertyKeyId() ).name();
         }
         catch ( TokenNotFoundException e )
         {

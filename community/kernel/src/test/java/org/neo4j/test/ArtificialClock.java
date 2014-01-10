@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -23,7 +23,6 @@ import java.util.concurrent.TimeUnit;
 
 import org.neo4j.helpers.Clock;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.NANOSECONDS;
 
 public class ArtificialClock implements Clock
@@ -36,12 +35,6 @@ public class ArtificialClock implements Clock
         return NANOSECONDS.toMillis( currentTimeNanos );
     }
 
-    @Override
-    public long nanoTime()
-    {
-        return currentTimeNanos;
-    }
-
     public Progressor progressor( long time, TimeUnit unit )
     {
         return new Progressor( unit.toNanos( time ) );
@@ -50,16 +43,6 @@ public class ArtificialClock implements Clock
     public void progress( long time, TimeUnit unit )
     {
         progress( unit.toNanos( time ) );
-    }
-
-    public void setCurrentTime( long millis )
-    {
-        setCurrentTime( millis, 0 );
-    }
-
-    public synchronized void setCurrentTime( long millis, long nanos )
-    {
-        currentTimeNanos = MILLISECONDS.toNanos( millis ) + nanos;
     }
 
     private synchronized void progress( long nanos )

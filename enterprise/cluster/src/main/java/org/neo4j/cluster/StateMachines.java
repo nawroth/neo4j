@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,15 +19,13 @@
  */
 package org.neo4j.cluster;
 
-import static org.neo4j.cluster.com.message.Message.CONVERSATION_ID;
-import static org.neo4j.cluster.com.message.Message.CREATED_BY;
-
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
-import java.util.Queue;
 import java.util.concurrent.Executor;
 import java.util.concurrent.locks.ReentrantReadWriteLock;
 
@@ -39,10 +37,12 @@ import org.neo4j.cluster.com.message.MessageSource;
 import org.neo4j.cluster.com.message.MessageType;
 import org.neo4j.cluster.statemachine.StateMachine;
 import org.neo4j.cluster.statemachine.StateTransitionListener;
-import org.neo4j.cluster.timeout.TimeoutStrategy;
 import org.neo4j.cluster.timeout.Timeouts;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.neo4j.cluster.com.message.Message.CONVERSATION_ID;
+import static org.neo4j.cluster.com.message.Message.CREATED_BY;
 
 /**
  * Combines a set of state machines into one. This will
@@ -69,15 +69,16 @@ public class StateMachines
 
     public StateMachines( MessageSource source,
                           final MessageSender sender,
-                          TimeoutStrategy timeoutStrategy,
+                          Timeouts timeouts,
                           DelayedDirectExecutor executor, Executor stateMachineExecutor )
     {
         this.sender = sender;
         this.executor = executor;
         this.stateMachineExecutor = stateMachineExecutor;
-        this.timeouts = new Timeouts( this, timeoutStrategy );
+        this.timeouts = timeouts;
 
         outgoing = new OutgoingMessageHolder();
+        timeouts.addMessageProcessor( this );
         source.addMessageProcessor( this );
     }
 
@@ -117,6 +118,8 @@ public class StateMachines
     {
         stateMachineExecutor.execute( new Runnable()
         {
+            OutgoingMessageHolder temporaryOutgoing = new OutgoingMessageHolder();
+
             @Override
             public void run()
             {
@@ -132,7 +135,12 @@ public class StateMachines
                             return; // No StateMachine registered for this MessageType type - Ignore this
                         }
 
-                        stateMachine.handle( message, outgoing );
+                        stateMachine.handle( message, temporaryOutgoing );
+                        Message<? extends MessageType> tempMessage;
+                        while ((tempMessage = temporaryOutgoing.nextOutgoingMessage()) != null)
+                        {
+                            outgoing.offer( tempMessage );
+                        }
 
                         // Process and send messages
                         // Allow state machines to send messages to each other as well in this loop
@@ -170,7 +178,11 @@ public class StateMachines
                                             .getClass() );
                                     if ( internalStatemachine != null )
                                     {
-                                        internalStatemachine.handle( (Message) outgoingMessage, outgoing );
+                                        internalStatemachine.handle( (Message) outgoingMessage, temporaryOutgoing );
+                                        while ((tempMessage = temporaryOutgoing.nextOutgoingMessage()) != null)
+                                        {
+                                            outgoing.offer( tempMessage );
+                                        }
                                     }
                                 }
                             }
@@ -233,18 +245,17 @@ public class StateMachines
 
     private class OutgoingMessageHolder implements MessageHolder
     {
-        private Queue<Message<? extends MessageType>> outgoingMessages = new LinkedList<Message<? extends
-                MessageType>>();
+        private Deque<Message<? extends MessageType>> outgoingMessages = new ArrayDeque<Message<? extends MessageType>>();
 
         @Override
         public synchronized void offer( Message<? extends MessageType> message )
         {
-            outgoingMessages.offer( message );
+            outgoingMessages.addFirst( message );
         }
 
         public synchronized Message<? extends MessageType> nextOutgoingMessage()
         {
-            return outgoingMessages.poll();
+            return outgoingMessages.pollFirst();
         }
     }
 }

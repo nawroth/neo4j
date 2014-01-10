@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -80,7 +80,7 @@ public enum HighAvailabilityMemberState
                 }
 
                 @Override
-                public boolean isAccessAllowed( HighAvailabilityMemberContext context )
+                public boolean isAccessAllowed()
                 {
                     return false;
                 }
@@ -148,7 +148,7 @@ public enum HighAvailabilityMemberState
                 }
 
                 @Override
-                public boolean isAccessAllowed( HighAvailabilityMemberContext context )
+                public boolean isAccessAllowed()
                 {
                     return false;
                 }
@@ -203,7 +203,7 @@ public enum HighAvailabilityMemberState
                 }
 
                 @Override
-                public boolean isAccessAllowed( HighAvailabilityMemberContext context )
+                public boolean isAccessAllowed()
                 {
                     return false;
                 }
@@ -260,7 +260,7 @@ public enum HighAvailabilityMemberState
                 }
 
                 @Override
-                public boolean isAccessAllowed( HighAvailabilityMemberContext context )
+                public boolean isAccessAllowed()
                 {
                     return true;
                 }
@@ -321,7 +321,7 @@ public enum HighAvailabilityMemberState
                 }
 
                 @Override
-                public boolean isAccessAllowed( HighAvailabilityMemberContext context )
+                public boolean isAccessAllowed()
                 {
                     return true;
                 }
@@ -336,5 +336,5 @@ public enum HighAvailabilityMemberState
 
     public abstract boolean isEligibleForElection();
 
-    public abstract boolean isAccessAllowed( HighAvailabilityMemberContext context );
+    public abstract boolean isAccessAllowed();
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,7 +19,6 @@
  */
 package org.neo4j.graphdb;
 
-import java.io.Closeable;
 import java.util.Iterator;
 
 /**
@@ -30,11 +29,12 @@ import java.util.Iterator;
  * or by exhausting the iterator.
  *
  * @param <T> type of values returned by this Iterator
- * 
+ *
  * @see ResourceIterable
  * @see Transaction
  */
-public interface ResourceIterator<T> extends Iterator<T>, Closeable {
+public interface ResourceIterator<T> extends Iterator<T>, Resource
+{
     /**
      * Close the iterator early, freeing associated resources
      *

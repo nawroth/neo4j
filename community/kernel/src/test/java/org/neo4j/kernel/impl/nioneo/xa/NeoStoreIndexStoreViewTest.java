@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,13 +19,19 @@
  */
 package org.neo4j.kernel.impl.nioneo.xa;
 
+import java.util.HashMap;
 import java.util.HashSet;
+import java.util.Map;
 import java.util.Set;
 
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+import org.mockito.InOrder;
+import org.mockito.invocation.InvocationOnMock;
+import org.mockito.stubbing.Answer;
+
 import org.neo4j.graphdb.DynamicLabel;
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
@@ -33,17 +39,24 @@ import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.helpers.collection.Visitor;
 import org.neo4j.kernel.GraphDatabaseAPI;
-import org.neo4j.kernel.ThreadToStatementContextBridge;
-import org.neo4j.kernel.api.StatementOperationParts;
-import org.neo4j.kernel.api.exceptions.schema.SchemaKernelException;
+import org.neo4j.kernel.api.Statement;
+import org.neo4j.kernel.api.exceptions.KernelException;
+import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.NodePropertyUpdate;
-import org.neo4j.kernel.api.operations.StatementState;
+import org.neo4j.kernel.api.labelscan.NodeLabelUpdate;
 import org.neo4j.kernel.impl.api.index.StoreScan;
+import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
+import org.neo4j.kernel.impl.locking.Lock;
+import org.neo4j.kernel.impl.locking.LockService;
 import org.neo4j.kernel.impl.nioneo.store.NeoStore;
 import org.neo4j.kernel.impl.nioneo.store.StoreAccess;
 import org.neo4j.test.TargetDirectory;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
+import static org.mockito.Mockito.inOrder;
+import static org.mockito.Mockito.mock;
+
 import static org.neo4j.helpers.collection.IteratorUtil.asSet;
 import static org.neo4j.helpers.collection.IteratorUtil.emptySetOf;
 
@@ -57,19 +70,22 @@ public class NeoStoreIndexStoreViewTest
     GraphDatabaseAPI graphDb;
     NeoStoreIndexStoreView storeView;
 
-    long labelId;
-    long propertyKeyId;
+    int labelId;
+    int propertyKeyId;
 
     Node alistair;
     Node stefan;
+    private LockService locks;
 
     @Test
     public void shouldScanExistingNodesForALabel() throws Exception
     {
         // given
         NodeUpdateCollectingVisitor visitor = new NodeUpdateCollectingVisitor();
+        @SuppressWarnings( "unchecked" )
+        Visitor<NodeLabelUpdate,Exception> labelVisitor = mock( Visitor.class );
         StoreScan<Exception> storeScan =
-            storeView.visitNodes( new long[] { labelId }, new long[] { propertyKeyId }, visitor );
+            storeView.visitNodes( new int[] { labelId }, new int[] { propertyKeyId }, visitor, labelVisitor );
 
         // when
         storeScan.run();
@@ -89,8 +105,10 @@ public class NeoStoreIndexStoreViewTest
         deleteAlistairAndStefanNodes();
 
         NodeUpdateCollectingVisitor visitor = new NodeUpdateCollectingVisitor();
+        @SuppressWarnings( "unchecked" )
+        Visitor<NodeLabelUpdate,Exception> labelVisitor = mock( Visitor.class );
         StoreScan<Exception> storeScan =
-                storeView.visitNodes( new long[] { labelId }, new long[] { propertyKeyId }, visitor );
+                storeView.visitNodes( new int[] { labelId }, new int[] { propertyKeyId }, visitor, labelVisitor );
 
         // when
         storeScan.run();
@@ -99,8 +117,36 @@ public class NeoStoreIndexStoreViewTest
         assertEquals( emptySetOf( NodePropertyUpdate.class ), visitor.getUpdates() );
     }
 
+    @Test
+    public void shouldLockNodesWhileReadingThem() throws Exception
+    {
+        // given
+        @SuppressWarnings("unchecked")
+        Visitor<NodePropertyUpdate, Exception> visitor = mock( Visitor.class );
+        StoreScan<Exception> storeScan = storeView
+                .visitNodesWithPropertyAndLabel( new IndexDescriptor( labelId, propertyKeyId ), visitor );
+
+        // when
+        storeScan.run();
+
+        // then
+        assertEquals( "allocated locks: " + lockMocks.keySet(), 2, lockMocks.size() );
+        Lock lock0 = lockMocks.get( 0L );
+        Lock lock1 = lockMocks.get( 1L );
+        assertNotNull( "Lock[node=0] never acquired", lock0 );
+        assertNotNull( "Lock[node=1] never acquired", lock1 );
+        InOrder order = inOrder( locks, lock0, lock1 );
+        order.verify( locks ).acquireNodeLock( 0, LockService.LockType.READ_LOCK );
+        order.verify( lock0 ).release();
+        order.verify( locks ).acquireNodeLock( 1, LockService.LockType.READ_LOCK );
+        order.verify( lock1 ).release();
+        order.verifyNoMoreInteractions();
+    }
+
+    Map<Long, Lock> lockMocks = new HashMap<>();
+
     @Before
-    public void before() throws SchemaKernelException
+    public void before() throws KernelException
     {
         String graphDbPath = testDirectory.directory().getAbsolutePath();
         graphDb = (GraphDatabaseAPI) new GraphDatabaseFactory().newEmbeddedDatabase( graphDbPath );
@@ -109,7 +155,21 @@ public class NeoStoreIndexStoreViewTest
         getOrCreateIds();
 
         NeoStore neoStore = new StoreAccess( graphDb ).getRawNeoStore();
-        storeView = new NeoStoreIndexStoreView( neoStore );
+        locks = mock( LockService.class, new Answer()
+        {
+            @Override
+            public Object answer( InvocationOnMock invocation ) throws Throwable
+            {
+                Long nodeId = (Long) invocation.getArguments()[0];
+                Lock lock = lockMocks.get( nodeId );
+                if ( lock == null )
+                {
+                    lockMocks.put( nodeId, lock = mock( Lock.class ) );
+                }
+                return lock;
+            }
+        } );
+        storeView = new NeoStoreIndexStoreView( locks, neoStore );
     }
 
     @After
@@ -121,8 +181,7 @@ public class NeoStoreIndexStoreViewTest
 
     private void createAlistairAndStefanNodes()
     {
-        Transaction tx = graphDb.beginTx();
-        try
+        try ( Transaction tx = graphDb.beginTx() )
         {
             alistair = graphDb.createNode( label );
             alistair.setProperty( "name", "Alistair" );
@@ -130,51 +189,37 @@ public class NeoStoreIndexStoreViewTest
             stefan.setProperty( "name", "Stefan" );
             tx.success();
         }
-        finally
-        {
-            tx.finish();
-        }
     }
 
     private void deleteAlistairAndStefanNodes()
     {
-        Transaction tx = graphDb.beginTx();
-        try
+        try ( Transaction tx = graphDb.beginTx() )
         {
             alistair.delete();
             stefan.delete();
             tx.success();
         }
-        finally
-        {
-            tx.finish();
-        }
     }
 
-    private void getOrCreateIds() throws SchemaKernelException
+    private void getOrCreateIds() throws KernelException
     {
-        Transaction tx = graphDb.beginTx();
-        try
+        try ( Transaction tx = graphDb.beginTx() )
         {
             ThreadToStatementContextBridge bridge =
                     graphDb.getDependencyResolver().resolveDependency( ThreadToStatementContextBridge.class );
 
-            StatementOperationParts ctx = bridge.getCtxForWriting();
-            StatementState state = bridge.statementForWriting();
-            labelId = ctx.keyWriteOperations().labelGetOrCreateForName( state, "Person" );
-            propertyKeyId = ctx.keyWriteOperations().propertyKeyGetOrCreateForName( state, "name" );
-            ctx.close( state );
+            try ( Statement statement = bridge.instance() )
+            {
+                labelId = statement.dataWriteOperations().labelGetOrCreateForName( "Person" );
+                propertyKeyId = statement.dataWriteOperations().propertyKeyGetOrCreateForName( "name" );
+            }
             tx.success();
-        }
-        finally
-        {
-            tx.finish();
         }
     }
 
     class NodeUpdateCollectingVisitor implements Visitor<NodePropertyUpdate, Exception>
     {
-        private final Set<NodePropertyUpdate> updates = new HashSet<NodePropertyUpdate>();
+        private final Set<NodePropertyUpdate> updates = new HashSet<>();
 
         @Override
         public boolean visit( NodePropertyUpdate element ) throws Exception

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -24,19 +24,31 @@ import java.util.Map;
 
 import org.apache.commons.configuration.Configuration;
 import org.neo4j.ext.udc.UdcSettings;
+import org.neo4j.graphdb.Node;
+import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
+import org.neo4j.graphdb.index.IndexManager;
+import org.neo4j.graphdb.index.RelationshipIndex;
 import org.neo4j.helpers.Settings;
 import org.neo4j.kernel.AbstractGraphDatabase;
+import org.neo4j.kernel.GraphDatabaseAPI;
 import org.neo4j.server.configuration.Configurator;
+import org.neo4j.server.logging.Logger;
 import org.neo4j.shell.ShellSettings;
 
 import static org.neo4j.server.configuration.Configurator.DATABASE_LOCATION_PROPERTY_KEY;
 import static org.neo4j.server.configuration.Configurator.DEFAULT_DATABASE_LOCATION_PROPERTY_KEY;
 
-public class CommunityDatabase extends/* implements */ Database
+public class CommunityDatabase implements Database
 {
-    protected final Configurator configurator;
+    public static final Logger log = Logger.getLogger(Database.class);
+
     protected final Configuration serverConfiguration;
+
+    private final Configurator configurator;
+    private boolean isRunning = false;
+
+    private AbstractGraphDatabase graph;
 
     @SuppressWarnings("deprecation")
     public CommunityDatabase( Configurator configurator )
@@ -54,14 +66,59 @@ public class CommunityDatabase extends/* implements */ Database
                 .newGraphDatabase();
     }
 
+    @Override
+    public String getLocation()
+    {
+        return graph.getStoreDir();
+    }
 
     @Override
-    @SuppressWarnings("deprecation")
+    public org.neo4j.graphdb.index.Index<Relationship> getRelationshipIndex( String name )
+    {
+        RelationshipIndex index = graph.index().forRelationships( name );
+        if ( index == null )
+        {
+            throw new RuntimeException( "No index for [" + name + "]" );
+        }
+        return index;
+    }
+
+    @Override
+    public org.neo4j.graphdb.index.Index<Node> getNodeIndex( String name )
+    {
+        org.neo4j.graphdb.index.Index<Node> index = graph.index()
+                .forNodes( name );
+        if ( index == null )
+        {
+            throw new RuntimeException( "No index for [" + name + "]" );
+        }
+        return index;
+    }
+
+    @Override
+    public IndexManager getIndexManager()
+    {
+        return graph.index();
+    }
+
+    @Override
+    public GraphDatabaseAPI getGraph()
+    {
+        return graph;
+    }
+
+    @Override
+    public void init() throws Throwable
+    {
+    }
+
+    @Override
     public void start() throws Throwable
     {
         try
         {
             this.graph = createDb();
+            isRunning = true;
             log.info( "Successfully started database" );
         }
         catch ( Exception e )
@@ -72,7 +129,6 @@ public class CommunityDatabase extends/* implements */ Database
     }
 
     @Override
-    @SuppressWarnings("deprecation")
     public void stop() throws Throwable
     {
         try
@@ -80,20 +136,32 @@ public class CommunityDatabase extends/* implements */ Database
             if ( this.graph != null )
             {
                 this.graph.shutdown();
+                isRunning = false;
                 this.graph = null;
                 log.info( "Successfully stopped database" );
             }
         }
         catch ( Exception e )
         {
-            log.error( "Database did not stop cleanly. Reason [%s]", e.getMessage() );
+            log.error( String.format("Database did not stop cleanly. Reason [%s]", e.getMessage()) );
             throw e;
         }
     }
 
+    @Override
+    public void shutdown() throws Throwable
+    {
+    }
+
+    @Override
+    public boolean isRunning()
+    {
+        return isRunning;
+    }
+
     protected Map<String, String> getDbTuningPropertiesWithServerDefaults()
     {
-        Map<String, String> result = new HashMap<String, String>( configurator.getDatabaseTuningProperties() );
+        Map<String, String> result = new HashMap<>( configurator.getDatabaseTuningProperties() );
         putIfAbsent( result, ShellSettings.remote_shell_enabled.name(), Settings.TRUE );
         putIfAbsent( result, GraphDatabaseSettings.keep_logical_logs.name(), Settings.TRUE );
 

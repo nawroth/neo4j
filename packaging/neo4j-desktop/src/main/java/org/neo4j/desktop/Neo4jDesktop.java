@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,37 +19,82 @@
  */
 package org.neo4j.desktop;
 
-import java.util.List;
-
-import org.neo4j.desktop.config.Environment;
-import org.neo4j.desktop.config.OsSpecificEnvironment;
-import org.neo4j.desktop.config.OsSpecificExtensionPackagesConfig;
-import org.neo4j.desktop.config.OsSpecificHeapSizeConfig;
-import org.neo4j.desktop.config.Value;
+import org.neo4j.desktop.config.Installation;
+import org.neo4j.desktop.config.OperatingSystemFamily;
+import org.neo4j.desktop.config.osx.DarwinInstallation;
+import org.neo4j.desktop.config.unix.UnixInstallation;
+import org.neo4j.desktop.config.windows.WindowsInstallation;
 import org.neo4j.desktop.runtime.DatabaseActions;
+import org.neo4j.desktop.ui.DesktopModel;
 import org.neo4j.desktop.ui.MainWindow;
+import org.neo4j.desktop.ui.PlatformUI;
+
+import static org.neo4j.desktop.ui.Components.alert;
 
 /**
  * The main class for starting the Neo4j desktop app window. The different components and wired up and started.
  */
-public class Neo4jDesktop
+public final class Neo4jDesktop
 {
-    private void start()
-    {
-        Environment environment = new OsSpecificEnvironment().get();
-        
-        Value<List<String>> extensionPackagesConfig =
-                new OsSpecificExtensionPackagesConfig( environment ).get();
-        DatabaseActions databaseActions = new DatabaseActions( extensionPackagesConfig );
-        Value<Integer> heapSizeConfig = new OsSpecificHeapSizeConfig( environment ).get();
-        MainWindow window = new MainWindow( databaseActions, environment, heapSizeConfig,
-                extensionPackagesConfig );
-
-        window.display();
-    }
-
     public static void main( String[] args )
     {
-        new Neo4jDesktop().start();
+        preStartInitialize();
+
+        Neo4jDesktop app = new Neo4jDesktop();
+        app.start();
+    }
+
+    public static void preStartInitialize()
+    {
+        PlatformUI.selectPlatformUI();
+        DesktopIdentification.register();
+    }
+
+    private void start()
+    {
+        try
+        {
+            Installation installation = getInstallation();
+            installation.initialize();
+
+            DesktopModel model = new DesktopModel( installation );
+            DatabaseActions databaseActions = new DatabaseActions( model );
+            addShutdownHook( databaseActions );
+
+            MainWindow window = new MainWindow( databaseActions, installation, model );
+            window.display();
+        }
+        catch ( Exception e )
+        {
+            alert( e.getMessage() );
+            e.printStackTrace( System.out );
+        }
+    }
+
+    private Installation getInstallation() throws Exception
+    {
+        switch ( OperatingSystemFamily.detect() )
+        {
+            case WINDOWS:
+                return new WindowsInstallation();
+            case MAC_OS:
+                return new DarwinInstallation();
+            case UNIX:
+                return new UnixInstallation();
+        }
+        return new UnixInstallation(); // This is the most generic one, presumably.
+    }
+
+    protected void addShutdownHook( final DatabaseActions databaseActions )
+    {
+        Runtime.getRuntime()
+                .addShutdownHook( new Thread()
+                {
+                    @Override
+                    public void run()
+                    {
+                        databaseActions.stop();
+                    }
+                } );
     }
 }

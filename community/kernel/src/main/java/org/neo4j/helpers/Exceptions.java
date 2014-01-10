@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,6 +21,8 @@ package org.neo4j.helpers;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
+import java.io.UnsupportedEncodingException;
+import java.lang.Thread.State;
 import java.lang.reflect.InvocationTargetException;
 
 public class Exceptions
@@ -101,7 +103,9 @@ public class Exceptions
         while ( exception != null )
         {
             if ( !toPeel.accept( exception ) )
+            {
                 break;
+            }
             exception = exception.getCause();
         }
         return exception;
@@ -131,7 +135,7 @@ public class Exceptions
         // no instances
     }
 
-    public static final Throwable rootCause( Throwable caughtException )
+    public static Throwable rootCause( Throwable caughtException )
     {
         if ( null == caughtException )
         {
@@ -149,10 +153,99 @@ public class Exceptions
     
     public static String stringify( Throwable cause )
     {
-        ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-        PrintStream target = new PrintStream( bytes );
-        cause.printStackTrace( target );
-        target.flush();
-        return bytes.toString();
+        try
+        {
+            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
+            PrintStream target = new PrintStream( bytes, true, "UTF-8" );
+            cause.printStackTrace( target );
+            target.flush();
+            return bytes.toString("UTF-8");
+        }
+        catch(UnsupportedEncodingException e)
+        {
+            cause.printStackTrace(System.err);
+            return "[ERROR: Unable to serialize stacktrace, UTF-8 not supported.]";
+        }
+    }
+    
+    public static String stringify( Thread thread, StackTraceElement[] elements )
+    {
+        StringBuilder builder = new StringBuilder(
+                "\"" + thread.getName() + "\"" + (thread.isDaemon() ? " daemon": "") +
+                " prio=" + thread.getPriority() +
+                " tid=" + thread.getId() +
+                " " + thread.getState().name().toLowerCase() + "\n" );
+        builder.append( "   " + State.class.getName() + ": " + thread.getState().name().toUpperCase() + "\n" );
+        for ( StackTraceElement element : elements )
+        {
+            builder.append( "      at " + element.getClassName() + "." + element.getMethodName() ); 
+            if ( element.isNativeMethod() )
+            {
+                builder.append( "(Native method)" );
+            }
+            else if ( element.getFileName() == null )
+            {
+                builder.append( "(Unknown source)" );
+            }
+            else
+            {
+                builder.append( "(" + element.getFileName() + ":" + element.getLineNumber() + ")" );
+            }
+            builder.append( "\n" );
+        }
+        return builder.toString();
+    }
+    
+    @SuppressWarnings( "rawtypes" )
+    public static boolean contains( final Throwable cause, final String containsMessage, final Class... anyOfTheseClasses )
+    {
+        final Predicate<Throwable> anyOfClasses = isAnyOfClasses( anyOfTheseClasses );
+        return contains( cause, new Predicate<Throwable>()
+        {
+            @Override
+            public boolean accept( Throwable item )
+            {
+                return item.getMessage() != null && item.getMessage().contains( containsMessage ) &&
+                        anyOfClasses.accept( item );
+            }
+        } );
+    }
+
+    @SuppressWarnings( "rawtypes" )
+    public static boolean contains( Throwable cause, Class... anyOfTheseClasses )
+    {
+        return contains( cause, isAnyOfClasses( anyOfTheseClasses ) );
+    }
+
+    public static boolean contains( Throwable cause, Predicate<Throwable> toLookFor )
+    {
+        while ( cause != null )
+        {
+            if ( toLookFor.accept( cause ) )
+            {
+                return true;
+            }
+            cause = cause.getCause();
+        }
+        return false;
+    }
+
+    public static Predicate<Throwable> isAnyOfClasses( final Class... anyOfTheseClasses )
+    {
+        return new Predicate<Throwable>()
+        {
+            @Override
+            public boolean accept( Throwable item )
+            {
+                for ( Class cls : anyOfTheseClasses )
+                {
+                    if ( cls.isInstance( item ) )
+                    {
+                        return true;
+                    }
+                }
+                return false;
+            }
+        };
     }
 }

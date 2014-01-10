@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,25 +19,32 @@
  */
 package org.neo4j.kernel.impl.api.index;
 
+import java.io.File;
 import java.io.IOException;
 import java.util.concurrent.Future;
 
+import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
+import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.IndexPopulator;
 import org.neo4j.kernel.api.index.InternalIndexState;
 import org.neo4j.kernel.api.index.SchemaIndexProvider;
 
 import static org.neo4j.helpers.FutureAdapter.VOID;
+import static org.neo4j.helpers.collection.IteratorUtil.emptyIterator;
 
 public class FailedIndexProxy extends AbstractSwallowingIndexProxy
 {
     protected final IndexPopulator populator;
+    private final String indexUserDescription;
 
-    public FailedIndexProxy( IndexDescriptor descriptor, SchemaIndexProvider.Descriptor providerDescriptor,
-                             IndexPopulator populator, IndexPopulationFailure populationFailure )
+    public FailedIndexProxy(IndexDescriptor descriptor, SchemaIndexProvider.Descriptor providerDescriptor,
+                            String indexUserDescription,
+                            IndexPopulator populator, IndexPopulationFailure populationFailure)
     {
         super( descriptor, providerDescriptor, populationFailure );
         this.populator = populator;
+        this.indexUserDescription = indexUserDescription;
     }
 
     @Override
@@ -56,7 +63,7 @@ public class FailedIndexProxy extends AbstractSwallowingIndexProxy
     @Override
     public boolean awaitStoreScanCompleted() throws IndexPopulationFailedKernelException
     {
-        throw getPopulationFailure().asIndexPopulationFailure( getDescriptor() );
+        throw getPopulationFailure().asIndexPopulationFailure( getDescriptor(), indexUserDescription );
     }
 
     @Override
@@ -68,6 +75,12 @@ public class FailedIndexProxy extends AbstractSwallowingIndexProxy
     @Override
     public void validate() throws IndexPopulationFailedKernelException
     {
-        throw getPopulationFailure().asIndexPopulationFailure( getDescriptor() );
+        throw getPopulationFailure().asIndexPopulationFailure( getDescriptor(), indexUserDescription );
+    }
+
+    @Override
+    public ResourceIterator<File> snapshotFiles()
+    {
+        return emptyIterator();
     }
 }

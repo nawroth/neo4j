@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,12 +19,13 @@
  */
 package org.neo4j.server.rest.transactional;
 
-import org.junit.Test;
+import java.util.concurrent.TimeUnit;
 
+import org.junit.Test;
+import org.neo4j.helpers.FakeClock;
 import org.neo4j.kernel.impl.util.TestLogger;
 import org.neo4j.server.rest.transactional.error.InvalidConcurrentTransactionAccess;
 import org.neo4j.server.rest.transactional.error.InvalidTransactionId;
-import org.neo4j.tooling.FakeClock;
 
 import static org.hamcrest.CoreMatchers.equalTo;
 import static org.junit.Assert.assertNotEquals;
@@ -32,13 +33,11 @@ import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
-
 import static org.neo4j.kernel.impl.util.TestLogger.LogCall.info;
-
-import java.util.concurrent.TimeUnit;
 
 public class TransactionHandleRegistryTest
 {
+
     @Test
     public void shouldGenerateTransactionId() throws Exception
     {
@@ -161,5 +160,33 @@ public class TransactionHandleRegistryTest
         }
 
         log.assertExactly( info( "Transaction with id 1 has been automatically rolled back." ) );
+    }
+
+    @Test
+    public void expiryTimeShouldBeSetToCurrentTimePlusTimeout() throws Exception
+    {
+        // Given
+        TestLogger log = new TestLogger();
+        FakeClock clock = new FakeClock();
+        int timeoutLength = 123;
+
+        TransactionHandleRegistry registry = new TransactionHandleRegistry( clock, timeoutLength, log );
+        TransactionHandle handle = mock( TransactionHandle.class );
+
+        long id = registry.begin();
+
+        // When
+        long timesOutAt = registry.release( id, handle );
+
+        // Then
+        assertThat( timesOutAt, equalTo( clock.currentTimeMillis() + timeoutLength ) );
+
+        // And when
+        clock.forward( 1337, TimeUnit.MILLISECONDS );
+        registry.acquire( id );
+        timesOutAt = registry.release( id, handle );
+
+        // Then
+        assertThat( timesOutAt, equalTo( clock.currentTimeMillis() + timeoutLength ) );
     }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,12 +21,14 @@ package org.neo4j.graphdb;
 
 import java.io.File;
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 import java.util.Set;
 
 import org.junit.Rule;
 import org.junit.Test;
 
+import org.neo4j.helpers.Function;
 import org.neo4j.kernel.IdGeneratorFactory;
 import org.neo4j.kernel.IdType;
 import org.neo4j.kernel.impl.nioneo.store.FileSystemAbstraction;
@@ -37,6 +39,7 @@ import org.neo4j.test.ImpermanentGraphDatabase;
 import org.neo4j.test.impl.EphemeralIdGenerator;
 import org.neo4j.tooling.GlobalGraphOperations;
 
+import static org.hamcrest.Matchers.hasItems;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -50,6 +53,7 @@ import static org.neo4j.graphdb.Neo4jMatchers.hasNoLabels;
 import static org.neo4j.graphdb.Neo4jMatchers.hasNoNodes;
 import static org.neo4j.graphdb.Neo4jMatchers.hasNodes;
 import static org.neo4j.graphdb.Neo4jMatchers.inTx;
+import static org.neo4j.helpers.collection.Iterables.map;
 import static org.neo4j.helpers.collection.Iterables.toList;
 import static org.neo4j.helpers.collection.IteratorUtil.asEnumNameSet;
 import static org.neo4j.helpers.collection.IteratorUtil.asSet;
@@ -63,6 +67,70 @@ public class LabelsAcceptanceTest
     {
         MY_LABEL,
         MY_OTHER_LABEL
+    }
+
+    /** https://github.com/neo4j/neo4j/issues/1279 */
+    @Test
+    public void shouldInsertLabelsWithoutDuplicatingThem() throws Exception
+    {
+        final Node node = dbRule.executeAndCommit( new Function<GraphDatabaseService, Node>()
+        {
+            @Override
+            public Node apply( GraphDatabaseService db )
+            {
+                return db.createNode();
+            }
+        } );
+        // POST "FOOBAR"
+        dbRule.executeAndCommit( new Function<GraphDatabaseService, Void>()
+        {
+            @Override
+            public Void apply( GraphDatabaseService db )
+            {
+                node.addLabel( label( "FOOBAR" ) );
+                return null;
+            }
+        } );
+        // POST ["BAZQUX"]
+        dbRule.executeAndCommit( new Function<GraphDatabaseService, Void>()
+        {
+            @Override
+            public Void apply( GraphDatabaseService db )
+            {
+                node.addLabel( label( "BAZQUX" ) );
+                return null;
+            }
+        } );
+        // PUT ["BAZQUX"]
+        dbRule.executeAndCommit( new Function<GraphDatabaseService, Void>()
+        {
+            @Override
+            public Void apply( GraphDatabaseService db )
+            {
+                for ( Label label : node.getLabels() )
+                {
+                    node.removeLabel( label );
+                }
+                node.addLabel( label( "BAZQUX" ) );
+                return null;
+            }
+        } );
+        // GET
+        List<Label> labels = dbRule.executeAndCommit( new Function<GraphDatabaseService, List<Label>>()
+        {
+            @Override
+            public List<Label> apply( GraphDatabaseService db )
+            {
+                List<Label> labels = new ArrayList<>();
+                for ( Label label : node.getLabels() )
+                {
+                    labels.add( label );
+                }
+                return labels;
+            }
+        } );
+        assertEquals( labels.toString(), 1, labels.size() );
+        assertEquals( "BAZQUX", labels.get( 0 ).name() );
     }
 
     @Test
@@ -189,7 +257,6 @@ public class LabelsAcceptanceTest
         Transaction tx = beansAPI.beginTx();
         try
         {
-            myNode = beansAPI.createNode();
             myNode.removeLabel( label );
             tx.success();
         }
@@ -353,8 +420,8 @@ public class LabelsAcceptanceTest
         tx.finish();
 
         // THEN
-        assertThat(glops, inTx( beansAPI, hasNodes( Labels.MY_LABEL, node )));
-        assertThat(glops, inTx( beansAPI, hasNoNodes( Labels.MY_OTHER_LABEL )));
+        assertThat( glops, inTx( beansAPI, hasNodes( Labels.MY_LABEL, node ) ) );
+        assertThat( glops, inTx( beansAPI, hasNoNodes( Labels.MY_OTHER_LABEL ) ) );
     }
 
     @Test
@@ -411,8 +478,14 @@ public class LabelsAcceptanceTest
 
         // Then
         assertEquals( 2, labels.size() );
-        assertEquals( Labels.MY_LABEL.name(), labels.get( 0 ).name() );
-        assertEquals( Labels.MY_OTHER_LABEL.name(), labels.get( 1 ).name() );
+        assertThat( map( new Function<Label, String>()
+        {
+            @Override
+            public String apply( Label label )
+            {
+                return label.name();
+            }
+        }, labels ), hasItems( Labels.MY_LABEL.name(), Labels.MY_OTHER_LABEL.name() ) );
     }
 
     @Test
@@ -447,6 +520,53 @@ public class LabelsAcceptanceTest
         assertEquals( 0, count( GlobalGraphOperations.at( db ).getAllNodes() ) );
         transaction.finish();
     }
+
+    @Test
+    public void removingLabelDoesNotBreakPreviouslyCreatedLabelsIterator()
+    {
+        // GIVEN
+        GraphDatabaseService db = dbRule.getGraphDatabaseService();
+        Label label1 = DynamicLabel.label( "A" );
+        Label label2 = DynamicLabel.label( "B" );
+
+        try ( Transaction tx = db.beginTx() )
+        {
+            Node node = db.createNode( label1, label2 );
+
+            Iterable<Label> labels = node.getLabels();
+            Iterator<Label> labelIterator = labels.iterator();
+
+            while ( labelIterator.hasNext() )
+            {
+                Label next = labelIterator.next();
+                node.removeLabel( next );
+            }
+            tx.success();
+        }
+    }
+
+    @Test
+    public void removingPropertyDoesNotBreakPreviouslyCreatedNodePropertyKeysIterator()
+    {
+        // GIVEN
+        GraphDatabaseService db = dbRule.getGraphDatabaseService();
+
+        try ( Transaction tx = db.beginTx() )
+        {
+            Node node = db.createNode();
+            node.setProperty( "name", "Horst" );
+            node.setProperty( "age", "72" );
+
+            Iterator<String> iterator = node.getPropertyKeys().iterator();
+
+            while ( iterator.hasNext() )
+            {
+                node.removeProperty( iterator.next() );
+            }
+            tx.success();
+        }
+    }
+
 
     @Test
     public void shouldCreateNodeWithLotsOfLabelsAndThenRemoveMostOfThem() throws Exception

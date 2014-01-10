@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,16 +19,9 @@
  */
 package org.neo4j.com;
 
-import static org.neo4j.com.DechunkingChannelBuffer.assertSameProtocolVersion;
-import static org.neo4j.com.Protocol.addLengthFieldPipes;
-import static org.neo4j.com.Protocol.assertChunkSizeIsWithinFrameSize;
-import static org.neo4j.com.Protocol.readString;
-import static org.neo4j.com.Protocol.writeString;
-
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.ObjectOutputStream;
-import java.net.InetAddress;
 import java.net.InetSocketAddress;
 import java.util.HashMap;
 import java.util.Map;
@@ -57,7 +50,9 @@ import org.jboss.netty.channel.WriteCompletionEvent;
 import org.jboss.netty.channel.group.ChannelGroup;
 import org.jboss.netty.channel.group.DefaultChannelGroup;
 import org.jboss.netty.channel.socket.nio.NioServerSocketChannelFactory;
+
 import org.neo4j.com.RequestContext.Tx;
+import org.neo4j.helpers.Clock;
 import org.neo4j.helpers.Exceptions;
 import org.neo4j.helpers.HostnamePort;
 import org.neo4j.helpers.NamedThreadFactory;
@@ -69,7 +64,12 @@ import org.neo4j.kernel.impl.nioneo.xa.NeoStoreXaDataSource;
 import org.neo4j.kernel.impl.util.StringLogger;
 import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.kernel.logging.Logging;
-import org.neo4j.tooling.Clock;
+
+import static org.neo4j.com.DechunkingChannelBuffer.assertSameProtocolVersion;
+import static org.neo4j.com.Protocol.addLengthFieldPipes;
+import static org.neo4j.com.Protocol.assertChunkSizeIsWithinFrameSize;
+import static org.neo4j.com.Protocol.readString;
+import static org.neo4j.com.Protocol.writeString;
 
 /**
  * Receives requests from {@link Client clients}. Delegates actual work to an instance
@@ -90,6 +90,9 @@ import org.neo4j.tooling.Clock;
 public abstract class Server<T, R> implements ChannelPipelineFactory, Lifecycle
 {
     private InetSocketAddress socketAddress;
+
+    private static final String INADDR_ANY = "0.0.0.0";
+
     private final Clock clock;
 
     public interface Configuration
@@ -104,7 +107,6 @@ public abstract class Server<T, R> implements ChannelPipelineFactory, Lifecycle
     }
 
     static final byte INTERNAL_PROTOCOL_VERSION = 2;
-    public static final int DEFAULT_BACKUP_PORT = 6362;
 
     // It's ok if there are more transactions, since these worker threads doesn't
     // do any actual work themselves, but spawn off other worker threads doing the
@@ -186,9 +188,9 @@ public abstract class Server<T, R> implements ChannelPipelineFactory, Lifecycle
 
         for ( int port = ports[0]; port <= ports[1]; port++ )
         {
-            if ( config.getServerAddress().getHost() == null )
+            if ( config.getServerAddress().getHost() == null || config.getServerAddress().getHost().equals( INADDR_ANY ))
             {
-                socketAddress = new InetSocketAddress( InetAddress.getLocalHost().getHostAddress(), port );
+                socketAddress = new InetSocketAddress( port );
             }
             else
             {
@@ -383,11 +385,8 @@ public abstract class Server<T, R> implements ChannelPipelineFactory, Lifecycle
 
     protected void tryToFinishOffChannel( Channel channel )
     {
-        Pair<RequestContext, AtomicLong> slave;
-        synchronized ( connectedSlaveChannels )
-        {
-            slave = connectedSlaveChannels.remove( channel );
-        }
+        Pair<RequestContext, AtomicLong> slave = null;
+        slave = unmapSlave( channel );
         if ( slave == null )
         {
             return;
@@ -444,12 +443,6 @@ public abstract class Server<T, R> implements ChannelPipelineFactory, Lifecycle
                 {
                     finishOffChannel( null, slave );
                 }
-                catch ( TransactionNotPresentOnMasterException e )
-                {
-                    // It's ok, there is nothing to finish anyway, since this is thrown when the transaction was not
-                    // found
-                    return;
-                }
                 catch ( Throwable e )
                 {
                     // Introduce some delay here. it becomes like a busy wait if it never succeeds
@@ -472,7 +465,7 @@ public abstract class Server<T, R> implements ChannelPipelineFactory, Lifecycle
         };
     }
 
-    protected void handleRequest( ChannelBuffer buffer, final Channel channel ) throws IOException
+    protected void handleRequest( ChannelBuffer buffer, final Channel channel )
     {
         Byte continuation = readContinuationHeader( buffer, channel );
         if ( continuation == null )
@@ -567,6 +560,7 @@ public abstract class Server<T, R> implements ChannelPipelineFactory, Lifecycle
                 Response<R> response = null;
                 try
                 {
+                    unmapSlave( channel );
                     response = type.getTargetCaller().call( requestTarget, context, bufferToReadFrom, targetBuffer );
                     type.getObjectSerializer().write( response.response(), targetBuffer );
                     writeStoreId( response.getStoreId(), targetBuffer );
@@ -587,7 +581,6 @@ public abstract class Server<T, R> implements ChannelPipelineFactory, Lifecycle
                     {
                         response.close();
                     }
-                    unmapSlave( channel );
                 }
             }
         };
@@ -619,7 +612,7 @@ public abstract class Server<T, R> implements ChannelPipelineFactory, Lifecycle
         targetBuffer.writeBytes( storeId.serialize() );
     }
 
-    private static void writeTransactionStreams( TransactionStream txStream, ChannelBuffer buffer ) throws IOException
+    private static void writeTransactionStreams( TransactionStream txStream, ChannelBuffer buffer )
     {
         if ( !txStream.hasNext() )
         {
@@ -705,11 +698,11 @@ public abstract class Server<T, R> implements ChannelPipelineFactory, Lifecycle
         return ChannelBuffers.dynamicBuffer();
     }
 
-    protected void unmapSlave( Channel channel )
+    protected Pair<RequestContext, AtomicLong> unmapSlave( Channel channel )
     {
         synchronized ( connectedSlaveChannels )
         {
-            connectedSlaveChannels.remove( channel );
+            return connectedSlaveChannels.remove( channel );
         }
     }
 

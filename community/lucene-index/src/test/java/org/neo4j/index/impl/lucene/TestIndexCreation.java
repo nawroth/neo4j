@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -34,6 +34,7 @@ import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.graphdb.index.Index;
 import org.neo4j.kernel.GraphDatabaseAPI;
+import org.neo4j.kernel.impl.transaction.XaDataSourceManager;
 import org.neo4j.kernel.impl.transaction.xaframework.LogEntry;
 import org.neo4j.kernel.impl.transaction.xaframework.LogIoUtils;
 import org.neo4j.kernel.impl.transaction.xaframework.XaCommand;
@@ -118,7 +119,8 @@ public class TestIndexCreation
 
     private void verifyThatIndexCreationTransactionIsTheFirstOne() throws Exception
     {
-        XaDataSource ds = db.getXaDataSourceManager().getXaDataSource( LuceneDataSource.DEFAULT_NAME );
+        XaDataSource ds = db.getDependencyResolver().resolveDependency( XaDataSourceManager.class ).getXaDataSource(
+                LuceneDataSource.DEFAULT_NAME );
         long version = ds.getCurrentLogVersion();
         ds.rotateLogicalLog();
         ReadableByteChannel log = ds.getLogicalLog( version );

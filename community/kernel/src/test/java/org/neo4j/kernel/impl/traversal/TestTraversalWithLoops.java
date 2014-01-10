@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -30,7 +30,7 @@ import org.neo4j.kernel.Uniqueness;
 
 import static org.neo4j.kernel.Traversal.traversal;
 
-public class TestTraversalWithLoops extends AbstractTestBase
+public class TestTraversalWithLoops extends TraversalTestBase
 {
     @Test
     public void traverseThroughNodeWithLoop() throws Exception

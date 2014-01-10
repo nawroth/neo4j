@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -20,28 +20,27 @@
 package org.neo4j.kernel.impl.core;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
 
+import org.neo4j.graphdb.ConstraintViolationException;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.NotFoundException;
 import org.neo4j.graphdb.Relationship;
 import org.neo4j.graphdb.RelationshipType;
-import org.neo4j.helpers.Function;
 import org.neo4j.helpers.ThisShouldNotHappenError;
-import org.neo4j.kernel.ThreadToStatementContextBridge;
-import org.neo4j.kernel.api.StatementOperationParts;
+import org.neo4j.kernel.api.Statement;
+import org.neo4j.kernel.api.StatementTokenNameLookup;
 import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
-import org.neo4j.kernel.api.exceptions.PropertyKeyIdNotFoundException;
-import org.neo4j.kernel.api.exceptions.PropertyKeyNotFoundException;
+import org.neo4j.kernel.api.exceptions.InvalidTransactionTypeKernelException;
+import org.neo4j.kernel.api.exceptions.PropertyKeyIdNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.PropertyNotFoundException;
-import org.neo4j.kernel.api.exceptions.schema.SchemaKernelException;
-import org.neo4j.kernel.api.operations.StatementState;
+import org.neo4j.kernel.api.exceptions.ReadOnlyDatabaseKernelException;
+import org.neo4j.kernel.api.exceptions.schema.IllegalTokenNameException;
+import org.neo4j.kernel.api.properties.DefinedProperty;
 import org.neo4j.kernel.api.properties.Property;
-import org.neo4j.kernel.impl.api.PrimitiveLongIterator;
-
-import static org.neo4j.helpers.collection.Iterables.map;
-import static org.neo4j.helpers.collection.IteratorUtil.asSet;
+import org.neo4j.kernel.impl.api.operations.KeyReadOperations;
 
 public class RelationshipProxy implements Relationship
 {
@@ -52,17 +51,17 @@ public class RelationshipProxy implements Relationship
         GraphDatabaseService getGraphDatabaseService();
         NodeManager getNodeManager();
     }
-    
+
     private final long relId;
     private final RelationshipLookups relationshipLookups;
-    private final ThreadToStatementContextBridge statementCtxProvider;
+    private final ThreadToStatementContextBridge statementContextProvider;
 
     RelationshipProxy( long relId, RelationshipLookups relationshipLookups,
-                       ThreadToStatementContextBridge statementCtxProvider )
+                       ThreadToStatementContextBridge statementContextProvider )
     {
         this.relId = relId;
         this.relationshipLookups = relationshipLookups;
-        this.statementCtxProvider = statementCtxProvider;
+        this.statementContextProvider = statementContextProvider;
     }
 
     @Override
@@ -80,15 +79,17 @@ public class RelationshipProxy implements Relationship
     @Override
     public void delete()
     {
-        StatementOperationParts ctxForWriting = statementCtxProvider.getCtxForWriting();
-        StatementState state = statementCtxProvider.statementForWriting();
-        try
+        try ( Statement statement = statementContextProvider.instance() )
         {
-            ctxForWriting.entityWriteOperations().relationshipDelete( state, getId() );
+            statement.dataWriteOperations().relationshipDelete( getId() );
         }
-        finally
+        catch ( InvalidTransactionTypeKernelException e )
         {
-            ctxForWriting.close( state );
+            throw new ConstraintViolationException( e.getMessage(), e );
+        }
+        catch ( ReadOnlyDatabaseKernelException e )
+        {
+            throw new ReadOnlyDbException();
         }
     }
 
@@ -149,134 +150,70 @@ public class RelationshipProxy implements Relationship
     @Override
     public Iterable<String> getPropertyKeys()
     {
-        final StatementOperationParts context = statementCtxProvider.getCtxForReading();
-        final StatementState state = statementCtxProvider.statementForReading();
-        try
+        try ( Statement statement = statementContextProvider.instance() )
         {
             List<String> keys = new ArrayList<>();
-            PrimitiveLongIterator keyIds = context.entityReadOperations().relationshipGetPropertyKeys( state, getId() );
-            while ( keyIds.hasNext() )
+            Iterator<DefinedProperty> properties = statement.readOperations().relationshipGetAllProperties( getId() );
+            while ( properties.hasNext() )
             {
-                keys.add( context.keyReadOperations().propertyKeyGetName( state, keyIds.next() ) );
+                keys.add( statement.readOperations().propertyKeyGetName( properties.next().propertyKeyId() ) );
             }
             return keys;
-
         }
         catch ( EntityNotFoundException e )
         {
             throw new NotFoundException( "Relationship not found", e );
         }
-        catch ( PropertyKeyIdNotFoundException e )
+        catch ( PropertyKeyIdNotFoundKernelException e )
         {
             throw new ThisShouldNotHappenError( "Jake",
-                    "Property key retrieved through kernel API should exist." );
-        }
-        finally
-        {
-            context.close( state );
-        }
-    }
-
-    @Override
-    public Iterable<Object> getPropertyValues()
-    {
-        final StatementOperationParts context = statementCtxProvider.getCtxForReading();
-        StatementState state = statementCtxProvider.statementForReading();
-        try
-        {
-            return asSet( map( new Function<Property,Object>() {
-                @Override
-                public Object apply( Property prop )
-                {
-                    try
-                    {
-                        return prop.value();
-                    }
-                    catch ( PropertyNotFoundException e )
-                    {
-                        throw new ThisShouldNotHappenError( "Jake",
-                                "Property key retrieved through kernel API should exist." );
-                    }
-                }
-            }, context.entityReadOperations().relationshipGetAllProperties( state, getId() )));
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new NotFoundException( "Relationship has been deleted", e );
-        }
-        finally
-        {
-            context.close( state );
+                                                "Property key retrieved through kernel API should exist." );
         }
     }
 
     @Override
     public Object getProperty( String key )
     {
-        // TODO: Push this check to getPropertyKeyId
-        // ^^^^^ actually, if the key is null, we could fail before getting the statement context...
         if ( null == key )
+        {
             throw new IllegalArgumentException( "(null) property key is not allowed" );
+        }
 
-        StatementOperationParts ctxForReading = statementCtxProvider.getCtxForReading();
-        StatementState state = statementCtxProvider.statementForReading();
-        try
+        try ( Statement statement = statementContextProvider.instance() )
         {
-            long propertyId = ctxForReading.keyReadOperations().propertyKeyGetForName( state, key );
-            return ctxForReading.entityReadOperations().relationshipGetProperty( state, relId, propertyId ).value();
-        }
-        catch ( EntityNotFoundException e )
-        {
-            throw new IllegalStateException( e );
-        }
-        catch ( PropertyKeyIdNotFoundException e )
-        {
-            throw new NotFoundException( e );
-        }
-        catch ( PropertyKeyNotFoundException e )
-        {
-            throw new NotFoundException( e );
-        }
-        catch ( PropertyNotFoundException e )
-        {
-            throw new NotFoundException( e );
-        }
-        finally
-        {
-            ctxForReading.close( state );
+            try
+            {
+                int propertyId = statement.readOperations().propertyKeyGetForName( key );
+                if ( propertyId == KeyReadOperations.NO_SUCH_PROPERTY_KEY )
+                {
+                    throw new NotFoundException( String.format( "No such property, '%s'.", key ) );
+                }
+                return statement.readOperations().relationshipGetProperty( relId, propertyId ).value();
+            }
+            catch ( EntityNotFoundException | PropertyNotFoundException e )
+            {
+                throw new NotFoundException(
+                        e.getUserMessage( new StatementTokenNameLookup( statement.readOperations() ) ), e );
+            }
         }
     }
 
     @Override
     public Object getProperty( String key, Object defaultValue )
     {
-        // TODO: Push this check to getPropertyKeyId
-        // ^^^^^ actually, if the key is null, we could fail before getting the statement context...
         if ( null == key )
-            throw new IllegalArgumentException( "(null) property key is not allowed" );
-
-        StatementOperationParts ctxForReading = statementCtxProvider.getCtxForReading();
-        StatementState state = statementCtxProvider.statementForReading();
-        try
         {
-            long propertyId = ctxForReading.keyReadOperations().propertyKeyGetForName( state, key );
-            return ctxForReading.entityReadOperations().relationshipGetProperty( state, relId, propertyId ).value(defaultValue);
+            throw new IllegalArgumentException( "(null) property key is not allowed" );
+        }
+
+        try ( Statement statement = statementContextProvider.instance() )
+        {
+            int propertyId = statement.readOperations().propertyKeyGetForName( key );
+            return statement.readOperations().relationshipGetProperty( relId, propertyId ).value( defaultValue );
         }
         catch ( EntityNotFoundException e )
         {
             throw new IllegalStateException( e );
-        }
-        catch ( PropertyKeyIdNotFoundException e )
-        {
-            return defaultValue;
-        }
-        catch ( PropertyKeyNotFoundException e )
-        {
-            return defaultValue;
-        }
-        finally
-        {
-            ctxForReading.close( state );
         }
     }
 
@@ -284,61 +221,51 @@ public class RelationshipProxy implements Relationship
     public boolean hasProperty( String key )
     {
         if ( null == key )
-            return false;
-
-        StatementOperationParts ctxForReading = statementCtxProvider.getCtxForReading();
-        StatementState state = statementCtxProvider.statementForReading();
-        try
         {
-            long propertyId = ctxForReading.keyReadOperations().propertyKeyGetForName( state, key );
-            return ctxForReading.entityReadOperations().relationshipHasProperty( state, relId, propertyId );
+            return false;
+        }
+
+        try ( Statement statement = statementContextProvider.instance() )
+        {
+            int propertyId = statement.readOperations().propertyKeyGetForName( key );
+            return propertyId != KeyReadOperations.NO_SUCH_PROPERTY_KEY &&
+                   statement.readOperations().relationshipGetProperty( relId, propertyId ).isDefined();
         }
         catch ( EntityNotFoundException e )
         {
             throw new IllegalStateException( e );
-        }
-        catch ( PropertyKeyIdNotFoundException e )
-        {
-            return false;
-        }
-        catch ( PropertyKeyNotFoundException e )
-        {
-            return false;
-        }
-        finally
-        {
-            ctxForReading.close( state );
         }
     }
 
     @Override
     public void setProperty( String key, Object value )
     {
-        StatementOperationParts ctxForWriting = statementCtxProvider.getCtxForWriting();
-        StatementState state = statementCtxProvider.statementForWriting();
         boolean success = false;
-        try
+        try ( Statement statement = statementContextProvider.instance() )
         {
-            long propertyKeyId = ctxForWriting.keyWriteOperations().propertyKeyGetOrCreateForName( state, key );
-            ctxForWriting.entityWriteOperations().relationshipSetProperty( state, relId, Property.property( propertyKeyId, value ) );
+            int propertyKeyId = statement.tokenWriteOperations().propertyKeyGetOrCreateForName( key );
+            statement.dataWriteOperations().relationshipSetProperty( relId, Property.property( propertyKeyId, value ) );
             success = true;
-        }
-        catch ( PropertyKeyIdNotFoundException e )
-        {
-            throw new ThisShouldNotHappenError( "Stefan/Jake", "A property key id disappeared under our feet" );
         }
         catch ( EntityNotFoundException e )
         {
             throw new IllegalStateException( e );
         }
-        catch ( SchemaKernelException e )
+        catch ( IllegalTokenNameException e )
         {
             // TODO: Maybe throw more context-specific error than just IllegalArgument
             throw new IllegalArgumentException( e );
         }
+        catch ( InvalidTransactionTypeKernelException e )
+        {
+            throw new ConstraintViolationException( e.getMessage(), e );
+        }
+        catch ( ReadOnlyDatabaseKernelException e )
+        {
+            throw new ReadOnlyDbException();
+        }
         finally
         {
-            ctxForWriting.close( state );
             if ( !success )
             {
                 relationshipLookups.getNodeManager().setRollbackOnly();
@@ -349,29 +276,27 @@ public class RelationshipProxy implements Relationship
     @Override
     public Object removeProperty( String key )
     {
-        StatementOperationParts ctxForWriting = statementCtxProvider.getCtxForWriting();
-        StatementState state = statementCtxProvider.statementForWriting();
-        try
+        try ( Statement statement = statementContextProvider.instance() )
         {
-            long propertyId = ctxForWriting.keyWriteOperations().propertyKeyGetOrCreateForName( state, key );
-            return ctxForWriting.entityWriteOperations().relationshipRemoveProperty( state, relId, propertyId ).value( null );
-        }
-        catch ( PropertyKeyIdNotFoundException e )
-        {
-            throw new ThisShouldNotHappenError( "Stefan/Jake", "A property key id disappeared under our feet" );
+            int propertyId = statement.tokenWriteOperations().propertyKeyGetOrCreateForName( key );
+            return statement.dataWriteOperations().relationshipRemoveProperty( relId, propertyId ).value( null );
         }
         catch ( EntityNotFoundException e )
         {
             throw new IllegalStateException( e );
         }
-        catch ( SchemaKernelException e )
+        catch ( IllegalTokenNameException e )
         {
             // TODO: Maybe throw more context-specific error than just IllegalArgument
             throw new IllegalArgumentException( e );
         }
-        finally
+        catch ( InvalidTransactionTypeKernelException e )
         {
-            ctxForWriting.close( state );
+            throw new ConstraintViolationException( e.getMessage(), e );
+        }
+        catch ( ReadOnlyDatabaseKernelException e )
+        {
+            throw new ReadOnlyDbException();
         }
     }
 
@@ -429,6 +354,6 @@ public class RelationshipProxy implements Relationship
 
     private void assertInTransaction()
     {
-        statementCtxProvider.assertInTransaction();
+        statementContextProvider.assertInTransaction();
     }
 }

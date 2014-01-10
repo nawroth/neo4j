@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -35,11 +35,12 @@ import org.apache.commons.configuration.Configuration;
 import org.apache.commons.configuration.ConfigurationException;
 import org.apache.commons.configuration.PropertiesConfiguration;
 import org.apache.commons.configuration.SystemConfiguration;
+
 import org.neo4j.helpers.collection.MapUtil;
 import org.neo4j.server.configuration.validation.Validator;
 import org.neo4j.server.logging.Logger;
 
-public class PropertyFileConfigurator implements Configurator
+public class PropertyFileConfigurator extends Configurator.Adapter
 {
     private static final String NEO4J_PROPERTIES_FILENAME = "neo4j.properties";
 
@@ -112,7 +113,7 @@ public class PropertyFileConfigurator implements Configurator
             {
                 log.info(
                         "No database tuning properties (org.neo4j.server.db.tuning.properties) found in [%s], using defaults.",
-                        databaseTuningPropertyFileLocation );
+                        configFile.getPath() );
                 return;
             }
         }
@@ -225,7 +226,7 @@ public class PropertyFileConfigurator implements Configurator
     @Override
     public Set<ThirdPartyJaxRsPackage> getThirdpartyJaxRsPackages()
     {
-        thirdPartyPackages = new HashSet<ThirdPartyJaxRsPackage>();
+        thirdPartyPackages = new HashSet<>();
         Properties properties = this.configuration()
                 .getProperties( THIRD_PARTY_PACKAGES_KEY );
         for ( Object key : properties.keySet() )

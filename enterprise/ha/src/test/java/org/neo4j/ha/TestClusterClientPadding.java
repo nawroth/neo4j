@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -45,6 +45,7 @@ public class TestClusterClientPadding
                 dir.directory( "dbs", true ), stringMap() );
         clusterManager.start();
         cluster = clusterManager.getDefaultCluster();
+        cluster.await( masterAvailable(  ));
         cluster.await( masterSeesMembers( 3 ) );
     }
 

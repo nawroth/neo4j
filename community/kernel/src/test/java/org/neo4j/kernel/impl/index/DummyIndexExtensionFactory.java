@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,7 +19,6 @@
  */
 package org.neo4j.kernel.impl.index;
 
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.Iterator;
 import java.util.List;
@@ -139,11 +138,7 @@ public class DummyIndexExtensionFactory extends
         @Override
         public IndexHits<T> get( String key, Object value )
         {
-            if ( value.equals( "refnode" ) )
-            {
-                return new IteratorIndexHits<T>( Arrays.asList( (T) db.getReferenceNode() ) );
-            }
-            return new IteratorIndexHits<T>( Collections.<T>emptyList() );
+            return new IteratorIndexHits<>( Collections.<T>emptyList() );
         }
 
         @Override

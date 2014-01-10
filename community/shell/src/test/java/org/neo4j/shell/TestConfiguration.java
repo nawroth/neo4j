@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -59,6 +59,6 @@ public class TestConfiguration
     {
         CollectingOutput output = new CollectingOutput();
         client.evaluate( "pwd", output );
-        assertTrue( output.asString().contains( "(0)" ) );
+        assertTrue( output.asString().contains( "(?)" ) );
     }
 }

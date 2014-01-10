@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -20,24 +20,19 @@
 package org.neo4j.kernel.impl.api;
 
 import org.mockito.Matchers;
-
-import org.neo4j.helpers.collection.IteratorUtil;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.StatementOperationParts;
+import org.neo4j.helpers.collection.IteratorUtil;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
 import org.neo4j.kernel.api.index.IndexReader;
-import org.neo4j.kernel.api.operations.EntityReadOperations;
-import org.neo4j.kernel.api.operations.EntityWriteOperations;
-import org.neo4j.kernel.api.operations.KeyReadOperations;
-import org.neo4j.kernel.api.operations.KeyWriteOperations;
-import org.neo4j.kernel.api.operations.LifecycleOperations;
-import org.neo4j.kernel.api.operations.SchemaReadOperations;
-import org.neo4j.kernel.api.operations.SchemaStateOperations;
-import org.neo4j.kernel.api.operations.SchemaWriteOperations;
-import org.neo4j.kernel.api.operations.StatementState;
+import org.neo4j.kernel.impl.api.operations.EntityReadOperations;
+import org.neo4j.kernel.impl.api.operations.EntityWriteOperations;
+import org.neo4j.kernel.impl.api.operations.KeyReadOperations;
+import org.neo4j.kernel.impl.api.operations.KeyWriteOperations;
+import org.neo4j.kernel.impl.api.operations.SchemaReadOperations;
+import org.neo4j.kernel.impl.api.operations.SchemaStateOperations;
+import org.neo4j.kernel.impl.api.operations.SchemaWriteOperations;
 import org.neo4j.kernel.impl.api.state.TxState;
 
 import static org.mockito.Matchers.anyLong;
@@ -48,40 +43,30 @@ public abstract class StatementOperationsTestHelper
 {
     public static StatementOperationParts mockedParts()
     {
-        StatementOperationParts stmtContextParts = new StatementOperationParts(
+        return new StatementOperationParts(
             mock( KeyReadOperations.class ),
             mock( KeyWriteOperations.class ),
             mock( EntityReadOperations.class ),
             mock( EntityWriteOperations.class ),
             mock( SchemaReadOperations.class ),
             mock( SchemaWriteOperations.class ),
-            mock( SchemaStateOperations.class ),
-            mock( LifecycleOperations.class ) );
-        return stmtContextParts;
+            mock( SchemaStateOperations.class ));
     }
     
-    public static StatementOperationParts mockedParts( KernelTransaction txContext )
-    {
-        StatementOperationParts mock = mockedParts();
-        when( txContext.newStatementOperations() ).thenReturn( mock );
-        return mock;
-    }
-    
-    public static StatementState mockedState()
+    public static KernelStatement mockedState()
     {
         return mockedState( mock( TxState.class ) );
     }
     
-    public static StatementState mockedState( final TxState txState )
+    public static KernelStatement mockedState( final TxState txState )
     {
-        StatementState state = mock( StatementState.class );
+        KernelStatement state = mock( KernelStatement.class );
         LockHolder lockHolder = mock( LockHolder.class );
-        IndexReaderFactory indexReaderFactory = mock( IndexReaderFactory.class );
         try
         {
             IndexReader indexReader = mock( IndexReader.class );
             when( indexReader.lookup( Matchers.any() ) ).thenReturn( IteratorUtil.emptyPrimitiveLongIterator() );
-            when( indexReaderFactory.newReader( anyLong() ) ).thenReturn( indexReader );
+            when( state.getIndexReader( anyLong() ) ).thenReturn( indexReader );
         }
         catch ( IndexNotFoundKernelException e )
         {
@@ -97,7 +82,6 @@ public abstract class StatementOperationsTestHelper
             }
         } );
         when( state.locks() ).thenReturn( lockHolder );
-        when( state.indexReaderFactory() ).thenReturn( indexReaderFactory );
         return state;
     }
     

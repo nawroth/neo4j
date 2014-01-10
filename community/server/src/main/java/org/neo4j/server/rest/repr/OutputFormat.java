@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -165,13 +165,13 @@ public class OutputFormat
                 {
                     if ( e instanceof NodeNotFoundException || e instanceof RelationshipNotFoundException )
                     {
-                        new WebApplicationException( notFound( e ) );
+                        throw new WebApplicationException( notFound( e ) );
                     }
                     if ( e instanceof BadInputException )
                     {
                         throw new WebApplicationException( badRequest( e ) );
                     }
-                    throw new WebApplicationException( serverError( e ) );
+                    throw new WebApplicationException( e, serverError( e ) );
                 }
                 finally
                 {
@@ -179,6 +179,11 @@ public class OutputFormat
                 }
             }
         };
+    }
+
+    public static void write( Representation representation, RepresentationFormat format, URI baseUri )
+    {
+        representation.serialize( format, baseUri, null );
     }
 
     private byte[] toBytes( String entity, boolean mustFail )

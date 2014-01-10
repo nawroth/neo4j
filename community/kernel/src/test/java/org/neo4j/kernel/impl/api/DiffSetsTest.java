@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,14 +19,18 @@
  */
 package org.neo4j.kernel.impl.api;
 
+import java.util.Collection;
 import java.util.Iterator;
 
 import org.junit.Test;
 
 import org.neo4j.helpers.Predicate;
+import org.neo4j.kernel.impl.util.DiffSets;
 
 import static java.util.Arrays.asList;
 
+import static org.hamcrest.MatcherAssert.assertThat;
+import static org.hamcrest.core.IsCollectionContaining.hasItems;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 
@@ -201,8 +205,46 @@ public class DiffSetsTest
         Iterator<Long> result = diffSets.apply( asList( 42l, 43l ).iterator() );
 
         // THEN
-        assertEquals( asList( 43l, 42l, 44l ), asCollection( result ) );
+        Collection<Long> collectedResult = asCollection( result );
+        assertEquals( 3, collectedResult.size() );
+        assertThat( collectedResult, hasItems( 43l, 42l, 44l ) );
+    }
 
+    @Test
+    public void replaceMultipleTimesWithAnInitialValue() throws Exception
+    {
+        // GIVEN
+        // an initial value, meaning an added value in "this transaction"
+        DiffSets<Integer> diff = new DiffSets<>();
+        diff.add( 0 );
+
+        // WHEN
+        // replacing that value two times
+        diff.replace( 0, 1 );
+        diff.replace( 1, 2 );
+
+        // THEN
+        // there should not be any removed value, only the last one added
+        assertEquals( asSet( 2 ), diff.getAdded() );
+        assertEquals( asSet(), diff.getRemoved() );
+    }
+
+    @Test
+    public void replaceMultipleTimesWithNoInitialValue() throws Exception
+    {
+        // GIVEN
+        // no initial value, meaning a value existing before "this transaction"
+        DiffSets<Integer> diff = new DiffSets<>();
+
+        // WHEN
+        // replacing that value two times
+        diff.replace( 0, 1 );
+        diff.replace( 1, 2 );
+
+        // THEN
+        // the initial value should show up as removed and the last one as added
+        assertEquals( asSet( 2 ), diff.getAdded() );
+        assertEquals( asSet( 0 ), diff.getRemoved() );
     }
 
     private static final Predicate<Long> ODD_FILTER = new Predicate<Long>()

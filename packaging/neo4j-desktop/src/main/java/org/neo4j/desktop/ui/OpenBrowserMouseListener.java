@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -23,10 +23,16 @@ import java.awt.Desktop;
 import java.awt.event.MouseAdapter;
 import java.awt.event.MouseEvent;
 import java.awt.event.MouseListener;
-
+import java.io.IOException;
+import java.net.URISyntaxException;
 import javax.swing.JLabel;
 
-import org.neo4j.desktop.config.Environment;
+import static java.awt.Cursor.DEFAULT_CURSOR;
+import static java.awt.Cursor.HAND_CURSOR;
+import static java.awt.Cursor.getPredefinedCursor;
+import static java.lang.String.format;
+import static javax.swing.JOptionPane.ERROR_MESSAGE;
+import static javax.swing.JOptionPane.showMessageDialog;
 
 /**
  * {@link MouseListener} that can open links in the systems default browser, presumably using {@link Desktop}. 
@@ -34,17 +40,40 @@ import org.neo4j.desktop.config.Environment;
 public class OpenBrowserMouseListener extends MouseAdapter
 {
     private final JLabel link;
-    private final Environment environment;
+    private final DesktopModel model;
 
-    public OpenBrowserMouseListener( JLabel link, Environment environment )
+    public OpenBrowserMouseListener( JLabel link, DesktopModel model )
     {
         this.link = link;
-        this.environment = environment;
+        this.model = model;
     }
 
     @Override
     public void mouseClicked( MouseEvent event )
     {
-        environment.openBrowser( link.getText() );
+        try
+        {
+            model.openBrowser( link.getText() );
+        }
+        catch ( IOException | URISyntaxException e )
+        {
+            e.printStackTrace( System.out );
+            showMessageDialog( link,
+                    format("Couldn't open the browser: %s", e.getMessage() ),
+                    "Error",
+                    ERROR_MESSAGE );
+        }
+    }
+
+    @Override
+    public void mouseEntered( MouseEvent e )
+    {
+        link.setCursor( getPredefinedCursor( HAND_CURSOR ) );
+    }
+
+    @Override
+    public void mouseExited( MouseEvent e )
+    {
+        link.setCursor( getPredefinedCursor( DEFAULT_CURSOR ) );
     }
 }

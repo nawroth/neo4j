@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,67 +19,40 @@
  */
 package org.neo4j.cluster.protocol.atomicbroadcast.multipaxos;
 
+import org.neo4j.cluster.protocol.ConfigurationContext;
+import org.neo4j.cluster.protocol.LoggingContext;
+import org.neo4j.cluster.protocol.TimeoutsContext;
+import org.neo4j.cluster.protocol.atomicbroadcast.AtomicBroadcastSerializer;
+
 /**
  * Context for the Learner Paxos state machine.
  */
-public class LearnerContext
+public interface LearnerContext
+    extends TimeoutsContext, LoggingContext, ConfigurationContext
 {
-    // Learner state
-    private long lastDeliveredInstanceId = -1;
-    private long lastLearnedInstanceId = -1;
-    private long lastKnownLearnedInstanceInCluster = -1;
+    long getLastDeliveredInstanceId();
 
-    private AcceptorInstanceStore acceptorStore;
+    void setLastDeliveredInstanceId( long lastDeliveredInstanceId );
 
-    public LearnerContext( AcceptorInstanceStore acceptorStore )
-    {
-        this.acceptorStore = acceptorStore;
-    }
+    long getLastLearnedInstanceId();
 
-    public long getLastDeliveredInstanceId()
-    {
-        return lastDeliveredInstanceId;
-    }
+    long getLastKnownLearnedInstanceInCluster();
 
-    public void setLastDeliveredInstanceId( long lastDeliveredInstanceId )
-    {
-        this.lastDeliveredInstanceId = lastDeliveredInstanceId;
-        acceptorStore.lastDelivered( new InstanceId(lastDeliveredInstanceId ));
-    }
+    void setLastKnownLearnedInstanceInCluster( long lastKnownLearnedInstanceInCluster );
 
-    public long getLastLearnedInstanceId()
-    {
-        return lastLearnedInstanceId;
-    }
+    void learnedInstanceId( long instanceId );
 
-    public long getLastKnownLearnedInstanceInCluster()
-    {
-        return lastKnownLearnedInstanceInCluster;
-    }
+    boolean hasDeliveredAllKnownInstances();
 
-    public void setLastKnownLearnedInstanceInCluster( long lastKnownLearnedInstanceInCluster )
-    {
-        this.lastKnownLearnedInstanceInCluster = lastKnownLearnedInstanceInCluster;
-    }
+    void leave();
 
-    public void learnedInstanceId( long instanceId )
-    {
-        this.lastLearnedInstanceId = Math.max( lastLearnedInstanceId, instanceId );
-        if ( lastLearnedInstanceId > lastKnownLearnedInstanceInCluster )
-        {
-            lastKnownLearnedInstanceInCluster = lastLearnedInstanceId;
-        }
-    }
+    PaxosInstance getPaxosInstance( InstanceId instanceId );
 
-    public boolean hasDeliveredAllKnownInstances()
-    {
-        return lastDeliveredInstanceId == lastKnownLearnedInstanceInCluster;
-    }
+    AtomicBroadcastSerializer newSerializer();
 
-    public void leave()
-    {
-        lastDeliveredInstanceId = -1;
-        lastLearnedInstanceId = -1;
-        lastKnownLearnedInstanceInCluster = -1;
-    }
+    Iterable<org.neo4j.cluster.InstanceId> getAlive();
+
+    void setNextInstanceId( long id );
+
+
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -32,6 +32,7 @@ import org.neo4j.kernel.lifecycle.LifecycleAdapter;
 
 import static org.neo4j.graphdb.factory.GraphDatabaseSettings.store_dir;
 import static org.neo4j.helpers.collection.IteratorUtil.addToCollection;
+import static org.neo4j.kernel.extension.KernelExtensionUtil.servicesClassPathEntryInformation;
 
 /**
  * Contract for implementing an index in Neo4j.
@@ -86,7 +87,7 @@ import static org.neo4j.helpers.collection.IteratorUtil.addToCollection;
  *
  * <h3>Online operation</h3>
  *
- * Once the index is online, the database will move to using the {@link #getOnlineAccessor(long,IndexConfiguration) online accessor} to
+ * Once the index is online, the database will move to using the {@link #getOnlineAccessor(long, IndexConfiguration) online accessor} to
  * write to the index.
  */
 public abstract class SchemaIndexProvider extends LifecycleAdapter implements Comparable<SchemaIndexProvider>
@@ -96,19 +97,19 @@ public abstract class SchemaIndexProvider extends LifecycleAdapter implements Co
     {
         private final IndexAccessor singleWriter = new IndexAccessor.Adapter();
         private final IndexPopulator singlePopulator = new IndexPopulator.Adapter();
-        
+
         @Override
         public IndexAccessor getOnlineAccessor( long indexId, IndexConfiguration config )
         {
             return singleWriter;
         }
-        
+
         @Override
         public IndexPopulator getPopulator( long indexId, IndexConfiguration config )
         {
             return singlePopulator;
         }
-        
+
         @Override
         public InternalIndexState getInitialState( long indexId )
         {
@@ -121,26 +122,29 @@ public abstract class SchemaIndexProvider extends LifecycleAdapter implements Co
             throw new IllegalStateException();
         }
     };
-    
-    public static final SelectionStrategy<SchemaIndexProvider> HIGHEST_PRIORITIZED_OR_NONE =
-            new SelectionStrategy<SchemaIndexProvider>()
+
+    public static final SelectionStrategy HIGHEST_PRIORITIZED_OR_NONE =
+            new SelectionStrategy()
     {
         @Override
-        public SchemaIndexProvider select( Class<SchemaIndexProvider> type, Iterable<SchemaIndexProvider> candidates )
-                throws IllegalArgumentException
+        @SuppressWarnings("unchecked")
+        public <T> T select( Class<T> type, Iterable<T> candidates ) throws IllegalArgumentException
         {
-            List<SchemaIndexProvider> all = addToCollection( candidates, new ArrayList<SchemaIndexProvider>() );
+            List<Comparable> all = (List<Comparable>) addToCollection( candidates, new ArrayList<T>() );
             if ( all.isEmpty() )
-                return NO_INDEX_PROVIDER;
+            {
+                throw new IllegalArgumentException( "No schema index provider " +
+                        SchemaIndexProvider.class.getName() + " found. " + servicesClassPathEntryInformation() );
+            }
             Collections.sort( all );
-            return all.get( all.size()-1 );
+            return (T) all.get( all.size()-1 );
         }
     };
-    
-    private final int priority;
+
+    protected final int priority;
 
     private final Descriptor providerDescriptor;
-    
+
     protected SchemaIndexProvider( Descriptor descriptor, int priority )
     {
         assert descriptor != null;
@@ -157,7 +161,7 @@ public abstract class SchemaIndexProvider extends LifecycleAdapter implements Co
      * Used for updating an index once initial population has completed.
      */
     public abstract IndexAccessor getOnlineAccessor( long indexId, IndexConfiguration config ) throws IOException;
-    
+
     /**
      * Returns a failure previously gotten from {@link IndexPopulator#markAsFailed(String)}
      *
@@ -218,7 +222,7 @@ public abstract class SchemaIndexProvider extends LifecycleAdapter implements Co
     {
         return new File( new File( new File( config.get( store_dir ), "schema" ), "index" ), key );
     }
-    
+
     public static class Descriptor
     {
         private final String key;
@@ -227,11 +231,17 @@ public abstract class SchemaIndexProvider extends LifecycleAdapter implements Co
         public Descriptor( String key, String version )
         {
             if (key == null)
+            {
                 throw new IllegalArgumentException( "null provider key prohibited" );
+            }
             if (key.length() == 0)
+            {
                 throw new IllegalArgumentException( "empty provider key prohibited" );
+            }
             if (version == null)
+            {
                 throw new IllegalArgumentException( "null provider version prohibited" );
+            }
 
             this.key = key;
             this.version = version;

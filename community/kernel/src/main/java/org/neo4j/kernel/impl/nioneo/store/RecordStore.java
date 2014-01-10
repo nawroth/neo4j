@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -28,14 +28,17 @@ import org.neo4j.helpers.collection.IterableWrapper;
 import org.neo4j.helpers.collection.PrefetchingIterator;
 import org.neo4j.helpers.progress.ProgressListener;
 import org.neo4j.kernel.IdType;
+import org.neo4j.kernel.impl.util.PrimitiveLongIterator;
 
-public interface RecordStore<R extends AbstractBaseRecord>
+public interface RecordStore<R extends AbstractBaseRecord> extends IdSequence
 {
     File getStorageFileName();
 
     WindowPoolStats getWindowPoolStats();
 
     long getHighId();
+
+    long getHighestPossibleIdInUse();
 
     R getRecord( long id );
 
@@ -101,7 +104,8 @@ public interface RecordStore<R extends AbstractBaseRecord>
             processRecord( PropertyRecord.class, store, property );
         }
 
-        public void processString( RecordStore<DynamicRecord> store, DynamicRecord string, IdType idType ) throws FAILURE
+        public void processString( RecordStore<DynamicRecord> store, DynamicRecord string,
+                                   @SuppressWarnings( "deprecation") IdType idType ) throws FAILURE
         {
             processDynamic( store, string );
         }
@@ -145,7 +149,8 @@ public interface RecordStore<R extends AbstractBaseRecord>
                                                      + type.getSimpleName().replace( "Record", "" ) + " records" );
         }
 
-        public <R extends AbstractBaseRecord> Iterable<R> scan( final RecordStore<R> store,
+        @SafeVarargs
+        public final <R extends AbstractBaseRecord> Iterable<R> scan( final RecordStore<R> store,
                 final Predicate<? super R>... filters )
         {
             return new Iterable<R>()
@@ -155,19 +160,14 @@ public interface RecordStore<R extends AbstractBaseRecord>
                 {
                     return new PrefetchingIterator<R>()
                     {
-                        final long highId = store.getHighId();
-                        int id = 0;
+                        final PrimitiveLongIterator ids = new StoreIdIterator( store );
 
                         @Override
                         protected R fetchNextOrNull()
                         {
-                            scan: while ( id <= highId && id >= 0 )
+                            scan: while ( ids.hasNext() && continueScanning )
                             {
-                                if (!continueScanning)
-                                {
-                                    return null;
-                                }
-                                R record = getRecord( store, id++ );
+                                R record = getRecord( store, ids.next() );
                                 for ( Predicate<? super R> filter : filters )
                                 {
                                     if ( !filter.accept( record ) ) continue scan;

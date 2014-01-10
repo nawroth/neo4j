@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -52,6 +52,7 @@ public class LogIoUtils
     {
         buffer.clear();
         buffer.limit( LOG_HEADER_SIZE );
+
         if ( channel.read( buffer ) != LOG_HEADER_SIZE )
         {
             if ( strict )
@@ -135,10 +136,11 @@ public class LogIoUtils
         int masterId = readNextInt( buf, channel );
         int myId = readNextInt( buf, channel );
         long timeWritten = readNextLong( buf, channel );
+        long latestCommittedTxWhenStarted = readNextLong( buf, channel );
 
         // re-create the transaction
         Xid xid = new XidImpl( globalId, branchId );
-        return new LogEntry.Start( xid, identifier, masterId, myId, -1, timeWritten );
+        return new LogEntry.Start( xid, identifier, masterId, myId, -1, timeWritten, latestCommittedTxWhenStarted );
     }
 
     private static LogEntry.Prepare readTxPrepareEntry( ByteBuffer buf,
@@ -191,7 +193,8 @@ public class LogIoUtils
         {
             writeStart( buffer, entry.getIdentifier(), ( (LogEntry.Start) entry ).getXid(),
                     ((LogEntry.Start) entry).getMasterId(), ((LogEntry.Start) entry).getLocalId(),
-                    ((LogEntry.Start) entry).getTimeWritten() );
+                    ((LogEntry.Start) entry).getTimeWritten(),
+                    ((LogEntry.Start) entry).getLastCommittedTxWhenTransactionStarted() );
         }
         else if ( entry instanceof LogEntry.Done )
         {
@@ -237,15 +240,23 @@ public class LogIoUtils
         buffer.put( LogEntry.DONE ).putInt( identifier );
     }
 
-    public static void writeStart( LogBuffer buffer, int identifier, Xid xid, int masterId, int myId, long timeWritten )
+    public static void writeStart( LogBuffer buffer, int identifier, Xid xid, int masterId, int myId, long timeWritten,
+                                   long latestCommittedTxWhenStarted )
             throws IOException
     {
         byte globalId[] = xid.getGlobalTransactionId();
         byte branchId[] = xid.getBranchQualifier();
         int formatId = xid.getFormatId();
-        buffer.put( LogEntry.TX_START ).put( (byte) globalId.length ).put(
-                (byte) branchId.length ).put( globalId ).put( branchId ).putInt( identifier ).putInt(
-                formatId ).putInt( masterId ).putInt( myId ).putLong( timeWritten );
+        buffer.put( LogEntry.TX_START )
+              .put( (byte) globalId.length )
+              .put( (byte) branchId.length )
+              .put( globalId ).put( branchId )
+              .putInt( identifier )
+              .putInt( formatId )
+              .putInt( masterId )
+              .putInt( myId )
+              .putLong( timeWritten )
+              .putLong( latestCommittedTxWhenStarted );
     }
 
     public static void writeCommand( LogBuffer buffer, int identifier, XaCommand command )

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -257,8 +257,8 @@ public interface BatchInserter
      *
      * Indexes created with the method are deferred until the batch inserter is shut down, at
      * which point a background job will populate all indexes, i.e. the index
-     * is not available during the batch insertion itself. It is therefor advisable to
-     * create deferred schema indexes just before shutting down the batch inserter.
+     * is not available during the batch insertion itself. It is therefore advisable to
+     * create deferred indexes just before shutting down the batch inserter.
      *
      * @param label {@link Label label} on nodes to be indexed
      *
@@ -275,7 +275,7 @@ public interface BatchInserter
      * Creating a constraint will have the transaction creating it block on commit until
      * all existing data has been verified for compliance. If any existing data doesn't
      * comply with the constraint the transaction will not be able to commit, but
-     * fail in {@link Transaction#finish()}.
+     * fail in {@link Transaction#close()}.
      * 
      * @param label the label this constraint is for.
      * @return a {@link ConstraintCreator} capable of providing details for, as well as creating
@@ -288,7 +288,7 @@ public interface BatchInserter
      * in memory to disk. Failing to invoke this method may leave the Neo4j
      * store in a inconsistent state.
      *
-     * Note that this method will trigger population of all schema indexes, both
+     * Note that this method will trigger population of all indexes, both
      * those created in the batch insertion session, as well as those that existed
      * previously. This may take a long time, depending on data size.
      *
@@ -305,13 +305,4 @@ public interface BatchInserter
      */
     String getStoreDir();
 
-    /**
-     * Returns the reference node id or <code>-1</code> if it doesn't exist.
-     *
-     * @return the reference node
-     * @deprecated The reference node concept is obsolete - indexes are the
-     *              canonical way of getting hold of entry points in the graph.
-     */
-    @Deprecated
-    long getReferenceNode();
 }

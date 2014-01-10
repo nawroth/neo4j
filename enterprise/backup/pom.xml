@@ -9,6 +9,7 @@
   <groupId>org.neo4j</groupId>
   <artifactId>neo4j-backup</artifactId>
   <version>2.0-SNAPSHOT</version>
+
   <name>Neo4j - Backup Tool</name>
   <description>Command line tool for grabbing backups from a running Neo4j instance</description>
   <packaging>jar</packaging>
@@ -17,6 +18,7 @@
   <properties>
     <bundle.namespace>org.neo4j.backup</bundle.namespace>
     <short-name>backup</short-name>
+    <version-package>backup.impl</version-package>
     <docs.url>http://docs.neo4j.org/chunked/${project.version}/operations-backup.html</docs.url>
   </properties>
 
@@ -89,7 +91,18 @@
     </dependency>
     <dependency>
       <groupId>org.mockito</groupId>
-      <artifactId>mockito-core</artifactId>
+      <artifactId>mockito-all</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.powermock</groupId>
+      <artifactId>powermock-module-junit4</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.powermock</groupId>
+      <artifactId>powermock-api-mockito</artifactId>
+      <scope>test</scope>
     </dependency>
   </dependencies>
 
@@ -131,7 +144,7 @@
   <distributionManagement>
     <site>
       <id>neo4j-site</id>
-      <url>scpexe://static.neo4j.org/var/www/components.neo4j.org/${project.artifactId}/${project.version}</url>
+      <url>scpexe://docs.neo4j.org/data/www/doc/components.neo4j.org/${project.artifactId}/${project.version}</url>
     </site>
   </distributionManagement>
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -47,7 +47,7 @@ public class TestRaceOnMultipleNodeImpl
             @Override
             public Node call() throws Exception
             {
-                return graphdb.getReferenceNode();
+                return graphdb.createNode();
             }
         });
         final Node original = tx( new Callable<Node>()
@@ -132,7 +132,7 @@ public class TestRaceOnMultipleNodeImpl
             @Override
             public Node call() throws Exception
             {
-                return graphdb.getReferenceNode();
+                return graphdb.createNode();
             }
         } );
         tx( new Runnable()
@@ -227,7 +227,7 @@ public class TestRaceOnMultipleNodeImpl
 
     private void clearCaches()
     {
-        graphdb.getNodeManager().clearCache();
+        graphdb.getDependencyResolver().resolveDependency( NodeManager.class ).clearCache();
     }
 
     private static Thread thread( String name, Runnable task )

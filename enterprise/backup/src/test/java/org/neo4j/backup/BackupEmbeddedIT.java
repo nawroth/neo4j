@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -67,7 +67,7 @@ public class BackupEmbeddedIT
         Transaction tx = db.beginTx();
         Node node = db.createNode();
         node.setProperty( "name", "Neo" );
-        db.getReferenceNode().createRelationshipTo( node, DynamicRelationshipType.withName( "KNOWS" ) );
+        db.createNode().createRelationshipTo( node, DynamicRelationshipType.withName( "KNOWS" ) );
         tx.success();
         tx.finish();
         return DbRepresentation.of( db );

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -31,6 +31,7 @@ import java.util.List;
 import ch.qos.logback.classic.Level;
 import ch.qos.logback.classic.Logger;
 import ch.qos.logback.classic.LoggerContext;
+import org.neo4j.kernel.impl.util.StringLogger;
 import org.slf4j.impl.StaticLoggerBinder;
 
 import org.neo4j.cluster.BindingListener;
@@ -42,6 +43,7 @@ import org.neo4j.cluster.ProtocolServer;
 import org.neo4j.cluster.protocol.atomicbroadcast.AtomicBroadcast;
 import org.neo4j.cluster.protocol.atomicbroadcast.AtomicBroadcastListener;
 import org.neo4j.cluster.protocol.atomicbroadcast.AtomicBroadcastSerializer;
+import org.neo4j.cluster.protocol.atomicbroadcast.ObjectStreamFactory;
 import org.neo4j.cluster.protocol.atomicbroadcast.Payload;
 import org.neo4j.cluster.protocol.cluster.Cluster;
 import org.neo4j.cluster.protocol.cluster.ClusterConfiguration;
@@ -80,7 +82,7 @@ public class MultiPaxosServer
     public void start()
             throws IOException
     {
-        broadcastSerializer = new AtomicBroadcastSerializer();
+        broadcastSerializer = new AtomicBroadcastSerializer(new ObjectStreamFactory(), new ObjectStreamFactory());
         final LifeSupport life = new LifeSupport();
         try
         {
@@ -88,9 +90,9 @@ public class MultiPaxosServer
                     .timeout( HeartbeatMessage.sendHeartbeat, 200 );
 
             NetworkedServerFactory serverFactory = new NetworkedServerFactory( life,
-                    new MultiPaxosServerFactory( new ClusterConfiguration( "default" ),
+                    new MultiPaxosServerFactory( new ClusterConfiguration( "default", StringLogger.SYSTEM ),
                             new LogbackService( null, null ) ),
-                    timeoutStrategy, new LogbackService( null, null ) );
+                    timeoutStrategy, new LogbackService( null, null ), new ObjectStreamFactory(), new ObjectStreamFactory() );
 
             ServerIdElectionCredentialsProvider electionCredentialsProvider = new ServerIdElectionCredentialsProvider();
             server = serverFactory.newNetworkedServer(

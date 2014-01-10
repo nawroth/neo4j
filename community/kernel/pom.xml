@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Copyright (c) 2002-2013 "Neo Technology,"
+  Copyright (c) 2002-2014 "Neo Technology,"
   Network Engine for Objects in Lund AB [http://neotechnology.com]
 
   This file is part of Neo4j.
@@ -31,6 +31,7 @@
   <groupId>org.neo4j</groupId>
   <artifactId>neo4j-kernel</artifactId>
   <version>2.0-SNAPSHOT</version>
+
   <name>Neo4j - Graph Database Kernel</name>
   <description>
  Neo4j kernel is a lightweight, embedded Java database designed to
@@ -42,10 +43,12 @@
   <properties>
     <bundle.namespace>org.neo4j</bundle.namespace>
     <short-name>kernel</short-name>
+    <version-package>kernel.impl</version-package>
     <git.executable>git</git.executable>
     <license-text.header>GPL-3-header.txt</license-text.header>
     <docs.url>http://docs.neo4j.org/chunked/${project.version}/</docs.url>
     <licensing.prepend.text>notice-gpl-prefix.txt</licensing.prepend.text>
+    <git.directory>${project.basedir}/../../.git</git.directory>
   </properties>
 
   <packaging>jar</packaging>
@@ -76,6 +79,15 @@ the relevant Commercial Agreement.
 
   <profiles>
     <profile>
+      <id>neo4j-root</id>
+      <activation>
+        <property><name>neo4j-root</name></property>
+      </activation>
+      <properties>
+        <git.directory>${project.basedir}/../../../.git</git.directory>
+      </properties>
+    </profile>
+    <profile>
       <id>git-windows</id>
       <activation>
         <os><family>Windows</family></os>
@@ -83,40 +95,6 @@ the relevant Commercial Agreement.
       <properties>
         <git.executable>git.cmd</git.executable>
       </properties>
-    </profile>
-    <profile><!-- used for testing -->
-      <id>unix-dependency-tools.jar</id>
-      <activation>
-        <file>
-          <exists>${java.home}/../lib/tools.jar</exists>
-        </file>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>com.sun.tools</groupId>
-          <artifactId>tools</artifactId>
-          <version>${sun.tools.version}</version>
-          <scope>system</scope>
-          <systemPath>${java.home}/../lib/tools.jar</systemPath>
-          <optional>true</optional>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile><!-- used for testing -->
-      <id>Windows-dependency-tools.jar</id>
-      <activation>
-        <os><family>Windows</family></os>
-      </activation>
-      <dependencies>
-        <dependency>
-          <groupId>com.sun.tools</groupId>
-          <artifactId>tools</artifactId>
-          <version>${sun.tools.version}</version>
-          <scope>system</scope>
-          <systemPath>${java.home}\\..\\lib\\tools.jar</systemPath>
-          <optional>true</optional>
-        </dependency>
-      </dependencies>
     </profile>
   </profiles>
 
@@ -159,66 +137,12 @@ the relevant Commercial Agreement.
         <groupId>pl.project13.maven</groupId>
         <artifactId>git-commit-id-plugin</artifactId>
         <configuration>
-          <dotGitDirectory>${project.build.directory}../../.git</dotGitDirectory>
+          <dotGitDirectory>${git.directory}</dotGitDirectory>
         </configuration>
       </plugin>
       <plugin>
         <artifactId>maven-antrun-plugin</artifactId>
         <executions>
-          <execution>
-            <id>generate-version</id>
-            <phase>generate-sources</phase>
-            <configuration>
-              <property environment="env" />
-              <target>
-                <mkdir dir="target/generated-sources/version/org/neo4j/kernel/impl/" />
-                <property name="git.describe" value="${git.commit.id.describe}" />
-                <property name="git.branch" value="${git.commit.id.branch}" />
-                <property name="git.commit" value="${git.commit.id}" />
-                <echo file="target/generated-sources/version/org/neo4j/${short-name}/impl/ComponentVersion.java">package org.neo4j.${short-name}.impl;
-
-import org.neo4j.kernel.Version;
-import org.neo4j.helpers.Service;
-
-@Service.Implementation(Version.class)
-public class ComponentVersion extends Version
-{
-    public ComponentVersion()
-    {
-        super("${project.artifactId}", "${project.version}");
-    }
-
-    @Override
-    public String getRevision()
-    {
-        // Goals with the revision returned from this method:
-        // 1. Which version of Neo4j is this?
-        // 2. If not a release version (i.e. SNAPSHOT), which git branch and commit hash was it built from?
-        // 3. Is there local modifications or not in this build? 
-        //
-        // This is a generated class, so why is there logic in here instead of generating this class
-        // with the correct revision directly? Because it's generated from a place that doesn't allow this
-        // kind of logic to build the revision at the place of generating it.
-        
-        String fromGitDescribe = "${git.describe}";
-        String version = "${project.version}";
-        StringBuilder result = new StringBuilder( version );
-        if ( version.endsWith( "-SNAPSHOT" ) )
-        {
-            result.append( "-${git.branch}-${git.commit}" );
-        }
-        if ( fromGitDescribe.endsWith( "-dirty" ) )
-        {
-            result.append( "-dirty" );
-        }
-        return result.toString();
-    }
-}
-</echo>
-              </target>
-            </configuration>
-            <goals><goal>run</goal></goals>
-          </execution>
           <execution>
             <id>generate-source-based-documentation</id>
             <phase>process-classes</phase>
@@ -240,21 +164,6 @@ public class ComponentVersion extends Version
             <version>1.8.4</version>
           </dependency>
         </dependencies>
-      </plugin>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>build-helper-maven-plugin</artifactId>
-        <executions>
-          <execution>
-            <phase>generate-sources</phase>
-            <goals><goal>add-source</goal></goals>
-            <configuration>
-              <sources>
-                <source>target/generated-sources/version</source>
-              </sources>
-            </configuration>
-          </execution>
-        </executions>
       </plugin>
       <plugin>
         <artifactId>maven-site-plugin</artifactId>
@@ -283,11 +192,11 @@ public class ComponentVersion extends Version
                 <detectJavaApiLink>true</detectJavaApiLink>
                 <detectLinks>true</detectLinks>
                 <quiet>true</quiet>
-                <excludePackageNames>*.impl.*</excludePackageNames>
+                <excludePackageNames>org.neo4j.kernel,*.impl.*</excludePackageNames>
                 <groups>
                   <group>
                     <title>Graph database</title>
-                    <packages>org.neo4j.kernel:org.neo4j.graphdb:org.neo4j.kernel.*:org.neo4j.graphdb.*</packages>
+                    <packages>org.neo4j.graphdb:org.neo4j.graphdb.*</packages>
                   </group>
                   <group>
                     <title>Helpers</title>
@@ -335,10 +244,11 @@ public class ComponentVersion extends Version
               <version>${slf4j-api.version}</version>
             </additionnalDependency>
           </additionnalDependencies>
+          <excludePackageNames>org.neo4j.kernel,*.impl.*</excludePackageNames>
           <groups>
             <group>
               <title>Graph database</title>
-<packages>org.neo4j.kernel:org.neo4j.graphdb:org.neo4j.kernel.*:org.neo4j.graphdb.*</packages>
+              <packages>org.neo4j.graphdb:org.neo4j.graphdb.*</packages>
             </group>
             <group>
               <title>Helpers</title>
@@ -367,7 +277,9 @@ public class ComponentVersion extends Version
           <failOnError>true</failOnError>
           <logResults>true</logResults>
           <!-- This is temporarily hard-coded, because the versionsBack attribute seems to not work on OS X, we'll
-           need to fix that. -->
+           need to fix that.
+           OBS: Set this to one version ahead, i.e. if you'd like it to compare against 1.9.3 then set it to 1.9.4
+            -->
           <comparisonVersion>1.9.M05</comparisonVersion>
           <ignoreMaintenenceVersions>false</ignoreMaintenenceVersions>
           <includes>
@@ -383,16 +295,36 @@ public class ComponentVersion extends Version
           <excludes>
             <!-- Ignore known breaking changes introduced in 2.0 -->
 
+            <!-- Remove reference node -->
+            <exclude>org/neo4j/graphdb/GraphDatabaseService</exclude>
+
             <!-- Changes to isolate state per builder to avoid race conditions -->
             <exclude>org/neo4j/graphdb/factory/GraphDatabaseFactory</exclude>
             <exclude>org/neo4j/graphdb/factory/GraphDatabaseFactory$1</exclude>
 
             <!-- Prepping for last cleanup of public config stuff. -->
             <exclude>org/neo4j/graphdb/factory/GraphDatabaseSettings*</exclude>
+            <exclude>org/neo4j/graphdb/factory/GraphDatabaseSetting*</exclude>
+            <exclude>org/neo4j/graphdb/factory/GraphDatabaseSetting*</exclude>
+            <exclude>org/neo4j/graphdb/factory/Title*</exclude>
+            <exclude>org/neo4j/graphdb/factory/Default*</exclude>
 
             <!-- Batch inserter indexing interfaces moved to org.neo4j.unsafe.batchinsert -->
             <exclude>org/neo4j/graphdb/index/BatchInserterIndex</exclude>
             <exclude>org/neo4j/graphdb/index/BatchInserterIndexProvider</exclude>
+
+            <!-- IndexProvider replaced by KernelExtension -->
+            <exclude>org/neo4j/graphdb/index/IndexProvider</exclude>
+            <exclude>org/neo4j/graphdb/index/IndexIterable</exclude>
+
+            <!-- #getPropertyValues() deprecated in favour of #getPropertyKeys() + #getProperty() -->
+            <exclude>org/neo4j/graphdb/PropertyContainer</exclude>
+
+            <!-- Traverser changed to be a ResourceIterable -->
+            <exclude>org/neo4j/graphdb/traversal/Traverser</exclude>
+            
+            <!-- ResourceIterator extends Resource (which extends AutoCloseable), instead of Closeable -->
+            <exclude>org/neo4j/graphdb/ResourceIterator</exclude>
           </excludes>
         </configuration>
       </plugin>
@@ -409,12 +341,6 @@ public class ComponentVersion extends Version
     	<artifactId>logback-classic</artifactId>
       <optional>true</optional>
     </dependency>
-<!--     <dependency>
-    	<groupId>janino</groupId>
-    	<artifactId>janino</artifactId>
-    	<version>2.5.10</version>
-      <optional>true</optional>
-    </dependency> -->
     <dependency>
       <groupId>junit</groupId>
       <artifactId>junit</artifactId>
@@ -453,67 +379,17 @@ public class ComponentVersion extends Version
       <artifactId>geronimo-spec-j2ee</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>commons-codec</groupId>
+      <artifactId>commons-codec</artifactId>
+      <scope>test</scope>
+    </dependency>
   </dependencies>
-
-  <reporting>
-    <plugins>
-      <plugin>
-        <groupId>org.codehaus.mojo</groupId>
-        <artifactId>clirr-maven-plugin</artifactId>
-        <configuration>
-          <includes>
-            <include>org/neo4j/graphdb/**</include>
-          </includes>
-        </configuration>
-      </plugin>
-      <plugin>
-        <artifactId>maven-javadoc-plugin</artifactId>
-        <configuration>
-          <additionnalDependencies>
-            <additionnalDependency>
-              <groupId>ch.qos.logback</groupId>
-              <artifactId>logback-classic</artifactId>
-              <version>${logback-classic.version}</version>
-            </additionnalDependency>
-            <additionnalDependency>
-              <groupId>ch.qos.logback</groupId>
-              <artifactId>logback-core</artifactId>
-              <version>${logback-classic.version}</version>
-            </additionnalDependency>
-            <additionnalDependency>
-              <groupId>org.slf4j</groupId>
-              <artifactId>slf4j-api</artifactId>
-              <version>${slf4j-api.version}</version>
-            </additionnalDependency>
-          </additionnalDependencies>
-          <detectJavaApiLink>true</detectJavaApiLink>
-          <detectLinks>true</detectLinks>
-          <quiet>true</quiet>
-          <excludePackageNames>*.impl.*</excludePackageNames>
-          <groups>
-            <group>
-              <title>Graph database</title>
-<packages>org.neo4j.kernel:org.neo4j.graphdb:org.neo4j.kernel.*:org.neo4j.graphdb.*</packages>
-            </group>
-            <group>
-              <title>Helpers</title>
-              <packages>org.neo4j.helpers:org.neo4j.helpers.*</packages>
-            </group>
-            <group>
-              <title>Tooling</title>
-              <packages>org.neo4j.tooling:org.neo4j.tooling.*</packages>
-            </group>
-          </groups>
-        </configuration>
-      </plugin>
-
-    </plugins>
-  </reporting>
 
   <distributionManagement>
     <site>
       <id>neo4j-site</id>
-      <url>scpexe://static.neo4j.org/var/www/components.neo4j.org/${project.artifactId}/${project.version}</url>
+      <url>scpexe://docs.neo4j.org/data/www/doc/components.neo4j.org/${project.artifactId}/${project.version}</url>
     </site>
   </distributionManagement>
 

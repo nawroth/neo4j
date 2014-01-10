@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -351,7 +351,7 @@ public interface Node extends PropertyContainer
      * framework. The new way of doing traversals is by creating a
      * new {@link TraversalDescription} from
      * {@link Traversal#traversal()}, add rules and
-     * behaviours to it and then calling
+     * behaviors to it and then calling
      * {@link TraversalDescription#traverse(Node...)}
      */
     @Deprecated
@@ -406,7 +406,7 @@ public interface Node extends PropertyContainer
      * framework. The new way of doing traversals is by creating a
      * new {@link TraversalDescription} from
      * {@link Traversal#traversal()}, add rules and
-     * behaviours to it and then calling
+     * behaviors to it and then calling
      * {@link TraversalDescription#traverse(Node...)}
      */
     @Deprecated
@@ -443,10 +443,7 @@ public interface Node extends PropertyContainer
      * Lists all labels attached to this node. If this node has no
      * labels an empty {@link Iterable} will be returned.
      *
-     * Please ensure that the returned {@link ResourceIterable} is closed correctly and as soon as possible
-     * inside your transaction to avoid potential blocking of write operations.
-     *
      * @return all labels attached to this node.
      */
-    ResourceIterable<Label> getLabels();
+    Iterable<Label> getLabels();
 }

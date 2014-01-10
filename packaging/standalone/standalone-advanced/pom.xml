@@ -15,6 +15,7 @@
   <name>Neo4j Advanced - Server Assembler</name>
 
   <version>2.0-SNAPSHOT</version>
+
   <description>This project assembles the Neo4j Advanced stand-alone distribution,
     pulling together all the deliverable artifacts and packaging them 
       into a downloadable installer.</description>
@@ -144,6 +145,7 @@ terms of the relevant Commercial Agreement.
               <licensingRequirementFiles>
                 <licensingRequirementFile>licensing-requirements-base.xml</licensingRequirementFile>
                 <licensingRequirementFile>licensing-requirements-js.xml</licensingRequirementFile>
+                <licensingRequirementFile>licensing-requirements-browser.xml</licensingRequirementFile>
                 <licensingRequirementFile>licensing-requirements-win.xml</licensingRequirementFile>
               </licensingRequirementFiles>
               <thirdPartyLicensingFilename>${project.artifactId}-${neo4j.version}-NOTICE-win.txt</thirdPartyLicensingFilename>
@@ -195,7 +197,7 @@ terms of the relevant Commercial Agreement.
   <distributionManagement>
     <site>
       <id>neo4j-site</id>
-      <url>scpexe://static.neo4j.org/var/www/components.neo4j.org/${project.artifactId}/${project.version}</url>
+      <url>scpexe://docs.neo4j.org/data/www/doc/components.neo4j.org/${project.artifactId}/${project.version}</url>
     </site>
   </distributionManagement>
 

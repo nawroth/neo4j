@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -33,13 +33,15 @@ import static java.util.Arrays.asList;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
+
 import static org.neo4j.kernel.api.impl.index.AllNodesCollector.getAllNodes;
 import static org.neo4j.kernel.api.impl.index.IndexWriterFactories.standard;
+import static org.neo4j.kernel.impl.api.index.IndexUpdaterSupport.updatePopulator;
 
 public class UniqueLuceneIndexPopulatorTest
 {
     @Test
-    public void shouldAddUniqueEntries() throws Exception
+    public void shouldAddUniqueUniqueLuceneIndexPopulatorTestEntries() throws Exception
     {
         // given
         DirectoryFactory.InMemoryDirectoryFactory directoryFactory = new DirectoryFactory.InMemoryDirectoryFactory();
@@ -76,7 +78,7 @@ public class UniqueLuceneIndexPopulatorTest
         // when
         populator.add( 1, "value1" );
         populator.add( 2, "value2" );
-        populator.update( asList( NodePropertyUpdate.add( 3, 100, "value3", new long[]{1000} ) ) );
+        updatePopulator( populator, asList( NodePropertyUpdate.add( 3, 100, "value3", new long[]{1000} ) ) );
 
         populator.close( true );
 
@@ -159,7 +161,7 @@ public class UniqueLuceneIndexPopulatorTest
         // when
         try
         {
-            populator.update( asList(  NodePropertyUpdate.add( 2, 100, "value1", new long[]{1000} )  ) );
+            updatePopulator( populator, asList( NodePropertyUpdate.add( 2, 100, "value1", new long[]{1000} ) ) );
 
             fail( "should have thrown exception" );
         }

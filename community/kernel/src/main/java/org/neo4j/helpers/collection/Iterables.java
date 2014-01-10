@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -34,9 +34,11 @@ import java.util.Set;
 import org.neo4j.graphdb.ResourceIterable;
 import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.helpers.Function;
+import org.neo4j.helpers.FunctionFromPrimitiveInt;
 import org.neo4j.helpers.FunctionFromPrimitiveLong;
 import org.neo4j.helpers.Predicate;
-import org.neo4j.kernel.impl.api.PrimitiveLongIterator;
+import org.neo4j.kernel.impl.util.PrimitiveIntIterator;
+import org.neo4j.kernel.impl.util.PrimitiveLongIterator;
 
 import static java.util.Arrays.asList;
 
@@ -209,7 +211,7 @@ public final class Iterables
     {
         return new FilterIterable.FilterIterator<>( i, specification );
     }
-    
+
     public static <X> X first( Iterable<? extends X> i )
     {
         Iterator<? extends X> iter = i.iterator();
@@ -225,22 +227,7 @@ public final class Iterables
 
     public static <X> X single( Iterable<? extends X> i )
     {
-        Iterator<? extends X> iter = i.iterator();
-        if ( iter.hasNext() )
-        {
-            X result = iter.next();
-
-            if ( iter.hasNext() )
-            {
-                throw new IllegalArgumentException( "More than one element in iterable" );
-            }
-
-            return result;
-        }
-        else
-        {
-            throw new IllegalArgumentException( "No elements in iterable" );
-        }
+        return IteratorUtil.single( i );
     }
 
     public static <X> Iterable<X> skip( final int skip, final Iterable<X> iterable )
@@ -407,6 +394,31 @@ public final class Iterables
         };
     }
 
+    public static <T> Iterator<T> map( final FunctionFromPrimitiveInt<T> mapFunction,
+            final PrimitiveIntIterator source )
+    {
+        return new Iterator<T>()
+        {
+            @Override
+            public boolean hasNext()
+            {
+                return source.hasNext();
+            }
+
+            @Override
+            public T next()
+            {
+                return mapFunction.apply( source.next() );
+            }
+
+            @Override
+            public void remove()
+            {
+                throw new UnsupportedOperationException();
+            }
+        };
+    }
+
     @SafeVarargs
     @SuppressWarnings("unchecked")
     public static <T, C extends T> Iterable<T> iterable( C... items )
@@ -437,6 +449,11 @@ public final class Iterables
     public static <T> Iterator<T> concat( Iterator<? extends T>... iterables )
     {
         return concat( Arrays.asList( (Iterator<T>[]) iterables ).iterator() );
+    }
+
+    public static <T> ResourceIterator<T> concatResourceIterators( Iterator<ResourceIterator<T>> iterators )
+    {
+        return new CombiningResourceIterator<>(iterators);
     }
 
     public static <T> Iterator<T> concat( Iterator<Iterator<T>> iterators )
@@ -601,6 +618,26 @@ public final class Iterables
                 return asResourceIterator( labels.iterator() );
             }
         };
+    }
+
+    public static <T> Set<T> toSet( Iterable<T> iterable )
+    {
+        return addAll( new HashSet<T>(), iterable );
+    }
+
+    public static String toString( Iterable<?> values, String separator )
+    {
+        Iterator<?> it = values.iterator();
+        StringBuilder sb = new StringBuilder();
+        while(it.hasNext())
+        {
+            sb.append( it.next().toString() );
+            if(it.hasNext())
+            {
+                sb.append( separator );
+            }
+        }
+        return sb.toString();
     }
 
     private static class MapIterable<FROM, TO>
@@ -872,7 +909,7 @@ public final class Iterables
             };
         }
     }
-    
+
     /**
      * Returns the index of the first occurrence of the specified element
      * in this iterable, or -1 if this iterable does not contain the element.
@@ -888,7 +925,9 @@ public final class Iterables
             for ( T item : iterable )
             {
                 if ( item == null )
+                {
                     return index;
+                }
                 index++;
             }
         }
@@ -898,18 +937,22 @@ public final class Iterables
             for ( T item : iterable )
             {
                 if ( itemToFind.equals( item ) )
+                {
                     return index;
+                }
                 index++;
             }
         }
         return -1;
     }
-    
+
     public static <T> Iterable<T> option( final T item )
     {
         if ( item == null )
+        {
             return Collections.emptyList();
-        
+        }
+
         return new Iterable<T>()
         {
             @Override
@@ -918,7 +961,7 @@ public final class Iterables
                 return new PrefetchingIterator<T>()
                 {
                     private boolean returned;
-                    
+
                     @Override
                     protected T fetchNextOrNull()
                     {
@@ -935,7 +978,7 @@ public final class Iterables
             }
         };
     }
-    
+
     @SuppressWarnings( "rawtypes" )
     public static <T, S extends Comparable> Iterable<T> sort( Iterable<T> iterable, final Function<T, S> compareFunction )
     {
@@ -950,5 +993,24 @@ public final class Iterables
             }
         } );
         return list;
+    }
+
+    public static String join( String joinString, Iterable<?> iter )
+    {
+        return join( joinString, iter.iterator() );
+    }
+
+    public static String join( String joinString, Iterator<?> iter )
+    {
+        StringBuilder sb = new StringBuilder();
+        while(iter.hasNext())
+        {
+            sb.append( iter.next().toString() );
+            if(iter.hasNext())
+            {
+                sb.append( joinString );
+            }
+        }
+        return sb.toString();
     }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -37,7 +37,7 @@ import org.neo4j.test.ha.ClusterManager;
  * IndexOutOfBoundsException(-1) when applying a transaction that deletes relationship(s).
  * Happens when performing transactions in HA, or during recovery.
  *
- * Symptomatic stack trace:
+ * Symptomatic stack trace: (Note that this is from before GCR was renamed to HighPerformanceCache)
  *
  * java.lang.IndexOutOfBoundsException: index -1
  *     at java.util.concurrent.atomic.AtomicReferenceArray.checkedByteOffset(AtomicReferenceArray.java:50)

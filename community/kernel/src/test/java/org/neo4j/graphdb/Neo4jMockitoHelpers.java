@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -24,8 +24,10 @@ import java.util.Iterator;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
-import org.neo4j.kernel.impl.api.PrimitiveLongIterator;
+import org.neo4j.kernel.impl.util.PrimitiveIntIterator;
+import org.neo4j.kernel.impl.util.PrimitiveLongIterator;
 
+import static org.neo4j.helpers.collection.IteratorUtil.toPrimitiveIntIterator;
 import static org.neo4j.helpers.collection.IteratorUtil.toPrimitiveLongIterator;
 
 public class Neo4jMockitoHelpers
@@ -44,13 +46,24 @@ public class Neo4jMockitoHelpers
 
     public static Answer<PrimitiveLongIterator> answerAsPrimitiveLongIteratorFrom( final Iterable<Long> values )
     {
-
         return new Answer<PrimitiveLongIterator>()
         {
             @Override
             public PrimitiveLongIterator answer( InvocationOnMock invocation ) throws Throwable
             {
                 return toPrimitiveLongIterator( values.iterator() );
+            }
+        };
+    }
+
+    public static Answer<PrimitiveIntIterator> answerAsPrimitiveIntIteratorFrom( final Iterable<Integer> values )
+    {
+        return new Answer<PrimitiveIntIterator>()
+        {
+            @Override
+            public PrimitiveIntIterator answer( InvocationOnMock invocation ) throws Throwable
+            {
+                return toPrimitiveIntIterator( values.iterator() );
             }
         };
     }

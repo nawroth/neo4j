@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,6 +19,7 @@
  */
 package org.neo4j.server.rest.transactional;
 
+import java.net.URI;
 import java.util.Iterator;
 import java.util.List;
 
@@ -27,7 +28,7 @@ public enum ResultDataContent
     row
     {
         @Override
-        public ResultDataContentWriter writer()
+        public ResultDataContentWriter writer( URI baseUri )
         {
             return new RowWriter();
         }
@@ -35,13 +36,21 @@ public enum ResultDataContent
     graph
     {
         @Override
-        public ResultDataContentWriter writer()
+        public ResultDataContentWriter writer( URI baseUri )
         {
             return new GraphExtractionWriter();
         }
+    },
+    rest
+    {
+        @Override
+        public ResultDataContentWriter writer( URI baseUri )
+        {
+            return new RestRepresentationWriter( baseUri );
+        }
     };
 
-    public abstract ResultDataContentWriter writer();
+    public abstract ResultDataContentWriter writer( URI baseUri );
 
     public static ResultDataContent[] fromNames( List<?> names )
     {

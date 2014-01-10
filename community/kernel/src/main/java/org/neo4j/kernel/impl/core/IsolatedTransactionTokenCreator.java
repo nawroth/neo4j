@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -46,8 +46,10 @@ public abstract class IsolatedTransactionTokenCreator implements TokenCreator
     }
     
     @Override
-    public synchronized int getOrCreate( final AbstractTransactionManager txManager, final EntityIdGenerator idGenerator,
-            final PersistenceManager persistence, final String name )
+    public synchronized int getOrCreate( final AbstractTransactionManager txManager,
+                                         final EntityIdGenerator idGenerator,
+                                         final PersistenceManager persistence,
+                                         final String name )
     {
         try
         {

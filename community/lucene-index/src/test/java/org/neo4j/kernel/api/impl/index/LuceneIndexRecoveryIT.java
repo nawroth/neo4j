@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -24,12 +24,14 @@ import java.io.IOException;
 import java.util.Arrays;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.zip.ZipOutputStream;
 
 import org.apache.lucene.store.Directory;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
+
 import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
@@ -38,12 +40,15 @@ import org.neo4j.kernel.GraphDatabaseAPI;
 import org.neo4j.kernel.api.exceptions.LabelNotFoundKernelException;
 import org.neo4j.kernel.api.exceptions.PropertyKeyNotFoundException;
 import org.neo4j.kernel.api.index.InternalIndexState;
+import org.neo4j.kernel.api.index.SchemaIndexProvider;
 import org.neo4j.kernel.extension.KernelExtensionFactory;
+import org.neo4j.kernel.impl.transaction.XaDataSourceManager;
 import org.neo4j.kernel.lifecycle.Lifecycle;
 import org.neo4j.test.EphemeralFileSystemRule;
 import org.neo4j.test.TestGraphDatabaseFactory;
 
-import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.*;
+
 import static org.neo4j.graphdb.DynamicLabel.label;
 import static org.neo4j.helpers.collection.IteratorUtil.asUniqueSet;
 
@@ -134,7 +139,7 @@ public class LuceneIndexRecoveryIT
     public void shouldNotAddTwiceDuringRecoveryIfCrashedDuringPopulation() throws Exception
     {
         // Given
-        startDb( createForEverPopulatingLuceneIndexFactory() );
+        startDb( createAlwaysInitiallyPopulatingLuceneIndexFactory() );
         Label myLabel = label( "MyLabel" );
 
         createIndex( myLabel );
@@ -145,13 +150,13 @@ public class LuceneIndexRecoveryIT
         killDb();
 
         // When
-        startDb( createForEverPopulatingLuceneIndexFactory() );
+        startDb( createAlwaysInitiallyPopulatingLuceneIndexFactory() );
 
         Transaction transaction = db.beginTx();
         try
         {
             IndexDefinition indexDefinition = db.schema().getIndexes().iterator().next();
-            db.schema().awaitIndexOnline( indexDefinition, 2l, TimeUnit.SECONDS );
+            db.schema().awaitIndexOnline( indexDefinition, 10l, TimeUnit.SECONDS );
 
             // Then
             assertEquals( 12, db.getNodeById( nodeId ).getProperty( NUM_BANANAS_KEY ) );
@@ -200,6 +205,12 @@ public class LuceneIndexRecoveryIT
         public void close()
         {
         }
+
+        @Override
+        public void dumpToZip( ZipOutputStream zip, byte[] scratchPad ) throws IOException
+        {
+            directoryFactory.dumpToZip( zip, scratchPad );
+        }
     };
 
     @Rule
@@ -207,15 +218,16 @@ public class LuceneIndexRecoveryIT
 
     private final String NUM_BANANAS_KEY = "number_of_bananas_owned";
 
-
     private void startDb( KernelExtensionFactory<?> indexProviderFactory )
     {
        if ( db != null )
-           db.shutdown();
+    {
+        db.shutdown();
+    }
 
        TestGraphDatabaseFactory factory = new TestGraphDatabaseFactory();
        factory.setFileSystem( fs.get() );
-       factory.setKernelExtensions( Arrays.<KernelExtensionFactory<?>>asList( indexProviderFactory ) );
+       factory.addKernelExtensions( Arrays.<KernelExtensionFactory<?>>asList( indexProviderFactory ) );
        db = (GraphDatabaseAPI) factory.newImpermanentDatabase();
     }
 
@@ -245,14 +257,15 @@ public class LuceneIndexRecoveryIT
     public void after()
     {
        if ( db != null )
-           db.shutdown();
+    {
+        db.shutdown();
+    }
        directoryFactory.close();
     }
 
-    @SuppressWarnings("deprecation")
     private void rotateLogs()
     {
-       db.getXaDataSourceManager().rotateLogicalLogs();
+       db.getDependencyResolver().resolveDependency( XaDataSourceManager.class ).rotateLogicalLogs();
     }
 
     private void createIndex( Label label )
@@ -310,7 +323,7 @@ public class LuceneIndexRecoveryIT
     }
 
     // Creates a lucene index factory with the shared in-memory directory
-    private KernelExtensionFactory<?> createForEverPopulatingLuceneIndexFactory()
+    private KernelExtensionFactory<?> createAlwaysInitiallyPopulatingLuceneIndexFactory()
     {
         return new KernelExtensionFactory<LuceneSchemaIndexProviderFactory.Dependencies>(
                 LuceneSchemaIndexProviderFactory.PROVIDER_DESCRIPTOR.getKey() )
@@ -331,7 +344,6 @@ public class LuceneIndexRecoveryIT
         };
     }
 
-
     // Creates a lucene index factory with the shared in-memory directory
     private KernelExtensionFactory<?> createLuceneIndexFactory()
     {
@@ -342,7 +354,14 @@ public class LuceneIndexRecoveryIT
             public Lifecycle newKernelExtension( LuceneSchemaIndexProviderFactory.Dependencies dependencies )
                     throws Throwable
             {
-                return new LuceneSchemaIndexProvider( ignoreCloseDirectoryFactory, dependencies.getConfig() );
+                return new LuceneSchemaIndexProvider( ignoreCloseDirectoryFactory, dependencies.getConfig() )
+                {
+                    @Override
+                    public int compareTo( SchemaIndexProvider o )
+                    {
+                        return 1;
+                    }
+                };
             }
         };
     }

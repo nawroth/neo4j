@@ -11,6 +11,7 @@
   <groupId>org.neo4j.build</groupId>
   <artifactId>packaging-build</artifactId>
   <version>2.0-SNAPSHOT</version>
+
   <name>Neo4j Packaging Build</name>
   <packaging>pom</packaging>
   <description>Project that builds Neo4j Packages.</description>
@@ -18,6 +19,8 @@
 
   <properties>
     <short-name>packaging-build</short-name>
+    <maven.site.skip>true</maven.site.skip>
+    <maven.site.deploy.skip>true</maven.site.deploy.skip>
   </properties>
 
   <scm>
@@ -28,7 +31,6 @@
 
   <modules>
     <module>standalone</module>
-    <module>qa</module>
     <module>neo4j-desktop</module>
   </modules>
 
@@ -55,7 +57,7 @@ terms of the relevant Commercial Agreement.
   <distributionManagement>
     <site>
       <id>neo4j-site</id>
-      <url>scpexe://static.neo4j.org/var/www/components.neo4j.org/${project.artifactId}/${project.version}</url>
+      <url>scpexe://docs.neo4j.org/data/www/doc/components.neo4j.org/${project.artifactId}/${project.version}</url>
     </site>
   </distributionManagement>
 
@@ -137,6 +139,18 @@ terms of the relevant Commercial Agreement.
           </plugin>
         </plugins>
       </build>
+    </profile>
+    <profile>
+      <id>installer-qa</id>
+      <activation>
+        <activeByDefault>false</activeByDefault>
+        <property>
+          <name>installerQA</name>
+        </property>
+      </activation>
+      <modules>
+        <module>installer-qa</module>
+      </modules>
     </profile>
   </profiles>
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -23,7 +23,6 @@ import java.util.Collection;
 import java.util.Iterator;
 
 import org.neo4j.graphdb.traversal.TraversalDescription;
-import org.neo4j.kernel.Traversal;
 
 /**
  * A traversal in the graph. A Traverser is an {@link Iterable} that
@@ -68,8 +67,8 @@ import org.neo4j.kernel.Traversal;
  * {@link Node}. Also because of the introduction of a new traversal framework
  * and the usage of it. The new way of doing traversals is by creating a
  * new {@link TraversalDescription} from
- * {@link Traversal#description()}, add rules and
- * behaviours to it and then calling
+ * {@link org.neo4j.graphdb.GraphDatabaseService#traversalDescription()}, add rules and
+ * behaviors to it and then calling
  * {@link TraversalDescription#traverse(Node...)}.
  */
 public interface Traverser extends Iterable<Node>

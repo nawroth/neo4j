@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -31,12 +31,13 @@ public interface Cache<E extends EntityWithSizeObject>
     String getName();
 
     /**
-     * Adds <CODE>element</CODE> to cache.
+     * Adds {@code element} to the cache. This operation is atomic and will not put the element into the cache
+     * if there were a previous element with the same {@link EntityWithSizeObject#getId() id}, but instead
+     * then return that element.
      *
-     * @param value
-     *            the element to cache
+     * @param value the element to cache.
      */
-    void put( E value );
+    E put( E value );
 
     /**
      * Removes the element for <CODE>key</CODE> from cache and returns it. If
@@ -79,6 +80,6 @@ public interface Cache<E extends EntityWithSizeObject>
     long missCount();
 
     void updateSize( E entity, int newSize );
-    
+
     void printStatistics();
 }

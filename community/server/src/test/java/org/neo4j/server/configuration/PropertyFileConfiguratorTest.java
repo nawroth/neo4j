@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -25,13 +25,16 @@ import java.io.IOException;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.rules.TemporaryFolder;
+
 import org.neo4j.server.logging.InMemoryAppender;
 import org.neo4j.test.Mute;
 
-import static org.hamcrest.Matchers.containsString;
+import static java.lang.String.format;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
-import static org.junit.Assert.assertThat;
+import static org.junit.Assert.assertTrue;
+
 import static org.neo4j.test.Mute.muteAll;
 
 public class PropertyFileConfiguratorTest
@@ -93,8 +96,17 @@ public class PropertyFileConfiguratorTest
         InMemoryAppender appender = new InMemoryAppender( PropertyFileConfigurator.log );
         new PropertyFileConfigurator( emptyPropertyFile );
 
-        assertThat( appender.toString(), containsString( String.format(
-                "INFO: No database tuning file explicitly set, defaulting to [%s]",
-                tuningPropertiesFile.getAbsolutePath() ) ) );
+        // Sometimes the wrong log provider may get onto the class path and then fail this test,
+        // to avoid that we accept both variants
+        String actual = appender.toString();
+        String content = format( ": No database tuning file explicitly set, defaulting to [%s]",
+                tuningPropertiesFile.getAbsolutePath() );
+        assertTrue( "Expected log message to contain hint about missing tuning file being replaced with defaults",
+                actual.contains( "INFO" + content ) ||
+                actual.contains( "Information" + content ) ||
+                actual.contains( "Info" + content )
+        );
     }
+
+
 }

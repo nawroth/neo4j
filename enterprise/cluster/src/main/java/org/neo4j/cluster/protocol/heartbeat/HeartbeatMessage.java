@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -58,11 +58,42 @@ public enum HeartbeatMessage
         {
             return "i_am_alive[" + server + "]";
         }
+
+        @Override
+        public boolean equals( Object o )
+        {
+            if ( this == o )
+            {
+                return true;
+            }
+            if ( o == null || getClass() != o.getClass() )
+            {
+                return false;
+            }
+
+            IAmAliveState that = (IAmAliveState) o;
+
+            if ( server != null ? !server.equals( that.server ) : that.server != null )
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        @Override
+        public int hashCode()
+        {
+            return server != null ? server.hashCode() : 0;
+        }
     }
 
     public static class SuspicionsState
             implements Serializable
     {
+
+        private static final long serialVersionUID = 3152836192116904427L;
+
         private Set<InstanceId> suspicions;
 
         public SuspicionsState( Set<InstanceId> suspicions )
@@ -73,6 +104,40 @@ public enum HeartbeatMessage
         public Set<InstanceId> getSuspicions()
         {
             return suspicions;
+        }
+
+        @Override
+        public String toString()
+        {
+            return "Suspicions:"+suspicions;
+        }
+
+        @Override
+        public boolean equals( Object o )
+        {
+            if ( this == o )
+            {
+                return true;
+            }
+            if ( o == null || getClass() != o.getClass() )
+            {
+                return false;
+            }
+
+            SuspicionsState that = (SuspicionsState) o;
+
+            if ( suspicions != null ? !suspicions.equals( that.suspicions ) : that.suspicions != null )
+            {
+                return false;
+            }
+
+            return true;
+        }
+
+        @Override
+        public int hashCode()
+        {
+            return suspicions != null ? suspicions.hashCode() : 0;
         }
     }
 }

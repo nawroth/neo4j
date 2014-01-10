@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -18,8 +18,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.neo4j.kernel.api.index;
-
-import org.neo4j.kernel.impl.api.index.IndexDescriptor;
 
 import static java.lang.String.format;
 import static java.lang.String.valueOf;
@@ -45,7 +43,7 @@ public abstract class IndexEntryConflictException extends Exception
      * allowed to be thrown in the first place. Typically where the index we performed an operation on is not a
      * unique index.
      */
-    public RuntimeException notAllowed( long labelId, long propertyKeyId )
+    public RuntimeException notAllowed( int labelId, int propertyKeyId )
     {
         return new IllegalStateException( String.format(
                 "Index for label:%s propertyKey:%s should not require unique values.",

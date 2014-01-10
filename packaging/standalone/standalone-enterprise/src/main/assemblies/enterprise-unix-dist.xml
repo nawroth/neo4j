@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
 
-    Copyright (c) 2002-2013 "Neo Technology,"
+    Copyright (c) 2002-2014 "Neo Technology,"
     Network Engine for Objects in Lund AB [http://neotechnology.com]
 
     This file is part of Neo4j.
@@ -57,7 +57,6 @@
       <includes>
         <include>system/lib/*.jar</include>
         <include>lib/*.jar</include>
-        <include>plugins/gremlin1.5/*.jar</include>
       </includes>
     </fileSet>
     <!-- chmod 755 for unix bins -->
@@ -122,6 +121,7 @@
         <include>io.netty:netty</include>
         <include>org.slf4j:slf4j-api</include>
         <include>org.scala-lang:scala-library</include>
+        <include>org.parboiled:*</include>
         <include>com.googlecode.concurrentlinkedhashmap:concurrentlinkedhashmap-lru</include>
       </includes>
       <excludes>
@@ -149,6 +149,7 @@
         <exclude>org.slf4j:slf4j-api</exclude>
         <exclude>commons-logging:*</exclude>
         <exclude>org.scala-lang:scala-library</exclude>
+        <exclude>org.parboiled:*</exclude>
         <exclude>org.neo4j.app:windows-service-wrapper:*</exclude>
         <exclude>com.googlecode.concurrentlinkedhashmap:concurrentlinkedhashmap-lru</exclude>
       </excludes>

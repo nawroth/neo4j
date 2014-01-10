@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -82,16 +82,11 @@ public class RelationshipDocIT extends AbstractRestFunctionalTestBase
     {
         Node node = data.get().get( "I" );
         Relationship relationship;
-        Transaction transaction = node.getGraphDatabase().beginTx();
-        try
+        try ( Transaction transaction = node.getGraphDatabase().beginTx() )
         {
             relationship = node.getSingleRelationship(
                     DynamicRelationshipType.withName( "know" ),
                     Direction.OUTGOING );
-        }
-        finally
-        {
-            transaction.finish();
         }
         String response = gen().expectedStatus(
                 com.sun.jersey.api.client.ClientResponse.Status.OK.getStatusCode() ).get(
@@ -269,14 +264,9 @@ public class RelationshipDocIT extends AbstractRestFunctionalTestBase
     {
         Node romeo = getNode( "Romeo" );
 
-        Transaction transaction = romeo.getGraphDatabase().beginTx();
-        try
+        try ( Transaction transaction = romeo.getGraphDatabase().beginTx() )
         {
             return romeo.getRelationships().iterator().next();
-        }
-        finally
-        {
-            transaction.finish();
         }
     }
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,7 +21,7 @@ package org.neo4j.server.rest.paging;
 
 import java.util.UUID;
 
-import org.neo4j.tooling.Clock;
+import org.neo4j.helpers.Clock;
 
 public class Lease
 {

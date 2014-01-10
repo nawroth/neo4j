@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -41,5 +41,5 @@ public abstract class TransactionLifecycleException extends Exception
         return new Neo4jError( getStatusCode(), this );
     }
 
-    protected abstract StatusCode getStatusCode();
+    protected abstract Status getStatusCode();
 }

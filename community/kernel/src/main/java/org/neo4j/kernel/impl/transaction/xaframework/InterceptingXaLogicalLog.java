@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -35,13 +35,14 @@ public class InterceptingXaLogicalLog extends XaLogicalLog
     private final TransactionInterceptorProviders providers;
 
     public InterceptingXaLogicalLog( File fileName, XaResourceManager xaRm,
-            XaCommandFactory cf, XaTransactionFactory xaTf,
-            TransactionInterceptorProviders providers, LogBufferFactory logBufferFactory,
-            FileSystemAbstraction fileSystem, Logging logging,
-            LogPruneStrategy pruneStrategy, TransactionStateFactory stateFactory, long rotateAtSize )
+                                     XaCommandFactory cf, XaTransactionFactory xaTf,
+                                     TransactionInterceptorProviders providers, LogBufferFactory logBufferFactory,
+                                     FileSystemAbstraction fileSystem, Logging logging,
+                                     LogPruneStrategy pruneStrategy, TransactionStateFactory stateFactory,
+                                     long rotateAtSize, InjectedTransactionValidator injectedTxValidator )
     {
         super( fileName, xaRm, cf, xaTf, logBufferFactory, fileSystem, logging, pruneStrategy,
-                stateFactory, rotateAtSize );
+                stateFactory, rotateAtSize, injectedTxValidator);
         this.providers = providers;
         this.ds = xaRm.getDataSource();
     }

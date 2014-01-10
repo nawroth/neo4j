@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -45,7 +45,7 @@ public class TestTransactionEventDeadlocks
     {
         GraphDatabaseService graphdb = database.getGraphDatabaseService();
         Transaction tx = graphdb.beginTx();
-        final Node root = graphdb.getReferenceNode();
+        final Node root = graphdb.createNode();
         try
         {
             root.setProperty( "counter", Long.valueOf( 0L ) );

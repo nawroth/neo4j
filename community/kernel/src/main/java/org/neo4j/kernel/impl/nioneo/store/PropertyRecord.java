@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -38,7 +38,7 @@ public class PropertyRecord extends Abstract64BitRecord
     private long entityId = -1;
     private Boolean nodeIdSet;
     private boolean isChanged;
-    private final List<DynamicRecord> deletedRecords = new LinkedList<DynamicRecord>();
+    private final List<DynamicRecord> deletedRecords = new LinkedList<>();
 
     public PropertyRecord( long id )
     {
@@ -117,6 +117,7 @@ public class PropertyRecord extends Abstract64BitRecord
 
     public void addDeletedRecord( DynamicRecord record )
     {
+        assert !record.inUse();
         deletedRecords.add( record );
     }
 
@@ -128,6 +129,12 @@ public class PropertyRecord extends Abstract64BitRecord
                 " (note that size is " + block.getSize() + ")";
 
         blockRecords.add( block );
+    }
+
+    public void setPropertyBlock( PropertyBlock block )
+    {
+        removePropertyBlock( block.getKeyIndexId() );
+        addPropertyBlock( block );
     }
 
     public PropertyBlock getPropertyBlock( int keyIndex )
@@ -203,7 +210,7 @@ public class PropertyRecord extends Abstract64BitRecord
     {
         prevProp = prev;
     }
-    
+
     @Override
     public PropertyRecord clone()
     {

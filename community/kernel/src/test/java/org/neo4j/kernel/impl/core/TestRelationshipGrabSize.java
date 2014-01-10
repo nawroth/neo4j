@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -71,14 +71,19 @@ public class TestRelationshipGrabSize
     private void finishTx( boolean success )
     {
         if ( success ) tx.success();
-        tx.finish();
+        tx.close();
     }
     
     private void clearCache()
     {
-        db.getNodeManager().clearCache();
+        nodeManager().clearCache();
     }
-    
+
+    private NodeManager nodeManager()
+    {
+        return db.getDependencyResolver().resolveDependency( NodeManager.class );
+    }
+
     @Test
     public void deleteRelationshipFromNotFullyLoadedNode() throws Exception
     {
@@ -98,7 +103,7 @@ public class TestRelationshipGrabSize
         }
         finishTx( true );
 
-        db.getNodeManager().clearCache();
+        nodeManager().clearCache();
 
         /*
          * Here node1 has grabSize+1 relationships. The first grabSize to be loaded will be
@@ -145,7 +150,7 @@ public class TestRelationshipGrabSize
         tx.success();
         tx.finish();
 
-        db.getNodeManager().clearCache();
+        nodeManager().clearCache();
 
         tx = db.beginTx();
 
@@ -230,7 +235,7 @@ public class TestRelationshipGrabSize
             RelationshipType createType, RelationshipType deleteType, int expectedCount )
     {
         Transaction tx = db.beginTx();
-        db.getNodeManager().clearCache();
+        db.getDependencyResolver().resolveDependency( NodeManager.class ).clearCache();
 
         node1.createRelationshipTo( node2, createType );
         Relationship rel1 = node1.getRelationships( deleteType ).iterator().next();

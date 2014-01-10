@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -26,21 +26,22 @@ import java.util.Iterator;
 import java.util.Set;
 import java.util.concurrent.CopyOnWriteArrayList;
 
+import org.neo4j.helpers.ThisShouldNotHappenError;
 import org.neo4j.kernel.api.constraints.UniquenessConstraint;
 import org.neo4j.kernel.api.exceptions.index.IndexNotFoundKernelException;
-import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
+import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.IndexEntryConflictException;
 import org.neo4j.kernel.api.index.IndexReader;
+import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.api.index.InternalIndexState;
 import org.neo4j.kernel.api.index.NodePropertyUpdate;
-import org.neo4j.kernel.impl.api.constraints.ConstraintVerificationFailedKernelException;
+import org.neo4j.kernel.api.exceptions.schema.ConstraintVerificationFailedKernelException;
 
 public class TentativeConstraintIndexProxy extends AbstractDelegatingIndexProxy
 {
     private final FlippableIndexProxy flipper;
     private final OnlineIndexProxy target;
-    private final Collection<IndexEntryConflictException> failures =
-            new CopyOnWriteArrayList<IndexEntryConflictException>();
+    private final Collection<IndexEntryConflictException> failures = new CopyOnWriteArrayList<>();
 
     public TentativeConstraintIndexProxy( FlippableIndexProxy flipper, OnlineIndexProxy target )
     {
@@ -49,15 +50,46 @@ public class TentativeConstraintIndexProxy extends AbstractDelegatingIndexProxy
     }
 
     @Override
-    public void update( Iterable<NodePropertyUpdate> updates ) throws IOException
+    public IndexUpdater newUpdater( IndexUpdateMode mode )
     {
-        try
+        switch( mode )
         {
-            target.accessor.updateAndCommit( updates );
-        }
-        catch ( IndexEntryConflictException conflict )
-        {
-            failures.add( conflict );
+            case ONLINE:
+                return new DelegatingIndexUpdater( target.accessor.newUpdater( mode ) )
+                {
+                    @Override
+                    public void process( NodePropertyUpdate update ) throws IOException, IndexEntryConflictException
+                    {
+                        try
+                        {
+                            delegate.process( update );
+                        }
+                        catch ( IndexEntryConflictException conflict )
+                        {
+                            failures.add( conflict );
+                        }
+                    }
+
+                    @Override
+                    public void close() throws IOException, IndexEntryConflictException
+                    {
+                        try
+                        {
+                            delegate.close();
+                        }
+                        catch ( IndexEntryConflictException conflict )
+                        {
+                            failures.add( conflict );
+                        }
+                    }
+                };
+
+            case RECOVERY:
+                return super.newUpdater( mode );
+
+            default:
+                throw new ThisShouldNotHappenError( "Stefan", "Unsupported IndexUpdateMode" );
+
         }
     }
 
@@ -86,20 +118,19 @@ public class TentativeConstraintIndexProxy extends AbstractDelegatingIndexProxy
     }
 
     @Override
-    public void validate() throws IndexPopulationFailedKernelException
+    public void validate() throws ConstraintVerificationFailedKernelException
     {
         Iterator<IndexEntryConflictException> iterator = failures.iterator();
         if ( iterator.hasNext() )
         {
-            Set<ConstraintVerificationFailedKernelException.Evidence> evidence =
-                    new HashSet<ConstraintVerificationFailedKernelException.Evidence>();
+            Set<ConstraintVerificationFailedKernelException.Evidence> evidence = new HashSet<>();
             do
             {
                 evidence.add( new ConstraintVerificationFailedKernelException.Evidence( iterator.next() ) );
             } while ( iterator.hasNext() );
             IndexDescriptor descriptor = getDescriptor();
-            throw new IndexPopulationFailedKernelException( descriptor, new ConstraintVerificationFailedKernelException(
-                    new UniquenessConstraint( descriptor.getLabelId(), descriptor.getPropertyKeyId() ), evidence ) );
+            throw new ConstraintVerificationFailedKernelException(
+                    new UniquenessConstraint( descriptor.getLabelId(), descriptor.getPropertyKeyId() ), evidence );
         }
     }
 

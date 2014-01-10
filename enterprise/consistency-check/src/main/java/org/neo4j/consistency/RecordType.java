@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -37,5 +37,10 @@ public enum RecordType
     LABEL,
     LABEL_NAME,
 
-    NODE_DYNAMIC_LABEL
+    NODE_DYNAMIC_LABEL,
+
+    // Below are non-native records
+
+    LABEL_SCAN_DOCUMENT,
+    INDEX
 }

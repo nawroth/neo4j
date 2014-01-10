@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -37,6 +37,7 @@ import org.neo4j.cluster.NetworkedServerFactory;
 import org.neo4j.cluster.ProtocolServer;
 import org.neo4j.cluster.protocol.atomicbroadcast.AtomicBroadcast;
 import org.neo4j.cluster.protocol.atomicbroadcast.AtomicBroadcastMap;
+import org.neo4j.cluster.protocol.atomicbroadcast.ObjectStreamFactory;
 import org.neo4j.cluster.protocol.cluster.Cluster;
 import org.neo4j.cluster.protocol.cluster.ClusterConfiguration;
 import org.neo4j.cluster.protocol.cluster.ClusterListener;
@@ -84,12 +85,12 @@ public class MultiPaxosNetworkTest
 
         NetworkedServerFactory serverFactory = new NetworkedServerFactory( life,
                 new MultiPaxosServerFactory(
-                        new ClusterConfiguration( "default",
+                        new ClusterConfiguration( "default", logging.getMessagesLog( ClusterConfiguration.class ),
                                 "cluster://localhost:5001",
                                 "cluster://localhost:5002",
                                 "cluster://localhost:5003" ),
                         logging ),
-                timeoutStrategy, logging );
+                timeoutStrategy, logging, new ObjectStreamFactory(), new ObjectStreamFactory() );
 
         ServerIdElectionCredentialsProvider serverIdElectionCredentialsProvider = new
                 ServerIdElectionCredentialsProvider();

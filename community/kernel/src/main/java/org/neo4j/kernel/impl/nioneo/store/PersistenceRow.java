@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -29,7 +29,7 @@ import java.nio.channels.FileChannel;
  * required record/block and it would be non efficient to create a large new
  * window to perform the required operation.
  */
-class PersistenceRow extends LockableWindow
+public class PersistenceRow extends LockableWindow
 {
     private State bufferState = State.EMPTY;
     private int recordSize = -1;

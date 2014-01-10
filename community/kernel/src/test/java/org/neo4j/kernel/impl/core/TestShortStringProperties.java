@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -192,12 +192,6 @@ public class TestShortStringProperties extends TestShortString
         encode( string, true );
     }
 
-    @Override
-    protected void assertCannotEncode( String string )
-    {
-        encode( string, false );
-    }
-
     private void encode( String string, boolean isShort )
     {
         long recordCount = dynamicRecordsInUse();
@@ -251,7 +245,8 @@ public class TestShortStringProperties extends TestShortString
 
     private PropertyStore propertyStore()
     {
-        XaDataSourceManager dsMgr = graphdb.getGraphDatabaseAPI().getXaDataSourceManager();
+        XaDataSourceManager dsMgr = graphdb.getGraphDatabaseAPI().getDependencyResolver()
+                .resolveDependency( XaDataSourceManager.class );
         return dsMgr.getNeoStoreDataSource().getXaConnection().getPropertyStore();
     }
 }

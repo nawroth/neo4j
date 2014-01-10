@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -114,6 +114,18 @@ public class DiffRecordStore<R extends AbstractBaseRecord> implements RecordStor
     }
 
     @Override
+    public long getHighestPossibleIdInUse()
+    {
+        return Math.max( highId, actual.getHighestPossibleIdInUse() );
+    }
+
+    @Override
+    public long nextId()
+    {
+        return actual.nextId();
+    }
+
+    @Override
     public R getRecord( long id )
     {
         return getRecord( id, false );
@@ -224,7 +236,8 @@ public class DiffRecordStore<R extends AbstractBaseRecord> implements RecordStor
         }
 
         @Override
-        public void processString( RecordStore<DynamicRecord> store, DynamicRecord string, IdType idType ) throws FAILURE
+        public void processString( RecordStore<DynamicRecord> store, DynamicRecord string,
+                                   @SuppressWarnings( "deprecation") IdType idType ) throws FAILURE
         {
             processor.processString( (RecordStore<DynamicRecord>) diffStore, string, idType );
         }

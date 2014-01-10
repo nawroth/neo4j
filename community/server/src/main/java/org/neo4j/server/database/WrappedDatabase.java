@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -20,39 +20,41 @@
 package org.neo4j.server.database;
 
 import org.neo4j.kernel.AbstractGraphDatabase;
+import org.neo4j.server.configuration.Configurator;
+import org.neo4j.server.configuration.ServerConfigurator;
 
-public class WrappedDatabase extends Database
+public class WrappedDatabase extends CommunityDatabase
 {
-    @SuppressWarnings("deprecation")
+    private final AbstractGraphDatabase db;
+
     public WrappedDatabase( AbstractGraphDatabase db )
     {
-        this.graph = db;
+        this( db, new ServerConfigurator( db ) );
+    }
+
+    public WrappedDatabase( AbstractGraphDatabase db, Configurator configurator )
+    {
+        super( configurator );
+        this.db = db;
+        try
+        {
+            start();
+        }
+        catch ( Throwable throwable )
+        {
+            throw new RuntimeException( throwable );
+        }
     }
 
     @Override
-    public void init() throws Throwable
+    protected AbstractGraphDatabase createDb()
     {
-    }
-
-    @Override
-    public void start() throws Throwable
-    {
+        return db;
     }
 
     @Override
     public void stop() throws Throwable
     {
-    }
-
-    @Override
-    public void shutdown()
-    {
-    }
-
-    @Override
-    @SuppressWarnings("deprecation")
-    public String getLocation()
-    {
-        return graph.getStoreDir();
+        // No-op
     }
 }

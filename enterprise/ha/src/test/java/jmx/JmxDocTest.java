@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -385,8 +385,8 @@ public class JmxDocTest
                 }
                 else
                 {
-                    newType += " as http://docs.oracle.com/javase/6/docs/api/javax/management/openmbean/CompositeData" +
-                            ".html[CompositeData][]";
+                    newType += " as http://docs.oracle.com/javase/7/docs/api/javax/management/openmbean/CompositeData.html"
+                               + "[CompositeData][]";
                 }
             }
         }

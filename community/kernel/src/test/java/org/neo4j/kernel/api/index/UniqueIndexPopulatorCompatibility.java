@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,14 +19,23 @@
  */
 package org.neo4j.kernel.api.index;
 
+import org.junit.Ignore;
 import org.junit.Test;
+
+import org.neo4j.kernel.impl.api.index.IndexUpdaterSupport;
 
 import static java.util.Arrays.asList;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
+
 import static org.neo4j.helpers.collection.IteratorUtil.asSet;
 
+@Ignore( "Not a test. This is a compatibility suite that provides test cases for verifying" +
+        " SchemaIndexProvider implementations. Each index provider that is to be tested by this suite" +
+        " must create their own test class extending IndexProviderCompatibilityTestSuite." +
+        " The @Ignore annotation doesn't prevent these tests to run, it rather removes some annoying" +
+        " errors or warnings in some IDEs about test classes needing a public zero-arg constructor." )
 public class UniqueIndexPopulatorCompatibility extends IndexProviderCompatibilityTestSuite.Compatibility
 {
     public UniqueIndexPopulatorCompatibility( IndexProviderCompatibilityTestSuite testSuite )
@@ -50,6 +59,7 @@ public class UniqueIndexPopulatorCompatibility extends IndexProviderCompatibilit
         try
         {
             populator.add( 2, "value1" );
+            populator.verifyDeferredConstraints();
             populator.close( true );
 
             fail( "expected exception" );
@@ -73,10 +83,11 @@ public class UniqueIndexPopulatorCompatibility extends IndexProviderCompatibilit
 
         // when
         IndexAccessor accessor = indexProvider.getOnlineAccessor( 17, new IndexConfiguration( true ) );
-        accessor.updateAndCommit( asList( NodePropertyUpdate.add( 1, 11, "value1", new long[]{4} ) ) );
+        IndexUpdaterSupport.updateAccessor( accessor, asList( NodePropertyUpdate.add( 1, 11, "value1",
+                new long[]{4} ) ) );
         try
         {
-            accessor.updateAndCommit( asList( NodePropertyUpdate.add( 2, 11, "value1", new long[]{4} ) ) );
+            IndexUpdaterSupport.updateAccessor( accessor, asList( NodePropertyUpdate.add( 2, 11, "value1", new long[]{4} ) ) );
 
             fail( "expected exception" );
         }
@@ -102,7 +113,7 @@ public class UniqueIndexPopulatorCompatibility extends IndexProviderCompatibilit
         IndexAccessor accessor = indexProvider.getOnlineAccessor( 17, new IndexConfiguration( true ) );
         try
         {
-            accessor.updateAndCommit( asList( NodePropertyUpdate.add( 2, 11, "value1", new long[]{4} ) ) );
+            IndexUpdaterSupport.updateAccessor( accessor, asList( NodePropertyUpdate.add( 2, 11, "value1", new long[]{4} ) ) );
 
             fail( "expected exception" );
         }
@@ -127,9 +138,9 @@ public class UniqueIndexPopulatorCompatibility extends IndexProviderCompatibilit
         IndexAccessor accessor = indexProvider.getOnlineAccessor( 17, new IndexConfiguration( true ) );
         try
         {
-            accessor.updateAndCommit( asList(
-                    NodePropertyUpdate.add( 1, 11, "value1", new long[]{4} ),
-                    NodePropertyUpdate.add( 2, 11, "value1", new long[]{4} ) ) );
+           IndexUpdaterSupport.updateAccessor( accessor, asList(
+                   NodePropertyUpdate.add( 1, 11, "value1", new long[]{4} ),
+                   NodePropertyUpdate.add( 2, 11, "value1", new long[]{4} ) ) );
 
             fail( "expected exception" );
         }
@@ -140,4 +151,5 @@ public class UniqueIndexPopulatorCompatibility extends IndexProviderCompatibilit
             assertEquals( asSet( 1l, 2l ), conflict.getConflictingNodeIds() );
         }
     }
+
 }

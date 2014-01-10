@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -22,7 +22,6 @@ package org.neo4j.graphdb;
 import java.util.concurrent.TimeUnit;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Rule;
 import org.junit.Test;
 
@@ -30,8 +29,9 @@ import org.neo4j.graphdb.schema.ConstraintDefinition;
 import org.neo4j.graphdb.schema.ConstraintType;
 import org.neo4j.graphdb.schema.IndexDefinition;
 import org.neo4j.graphdb.schema.Schema;
-import org.neo4j.graphdb.schema.UniquenessConstraintDefinition;
 import org.neo4j.test.ImpermanentDatabaseRule;
+
+import static java.lang.String.format;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.hamcrest.MatcherAssert.assertThat;
@@ -74,22 +74,35 @@ public class SchemaAcceptanceTest
         assertThat( getIndexes( db, label ), containsOnly( index ) );
     }
 
-    @Test @Ignore("2013-07-24 Non-urgent bug, needs fixing")
+    @Test
     public void addingAnIndexingRuleInNestedTxShouldSucceed() throws Exception
     {
         IndexDefinition index;
 
         // WHEN
         Transaction tx = db.beginTx();
+        IndexDefinition indexDef;
         try
         {
-            index = createIndex( db, label , propertyKey );
+            Transaction tx1 = db.beginTx();
+            try
+            {
+                indexDef = db.schema().indexFor( label ).on( propertyKey ).create();
+                tx1.success();
+            }
+            finally
+            {
+                tx1.finish();
+            }
+
+            index = indexDef;
             tx.success();
         }
         finally
         {
             tx.finish();
         }
+        waitForIndex( db, indexDef );
 
         // THEN
         assertThat( getIndexes( db, label ), containsOnly( index ) );
@@ -111,8 +124,8 @@ public class SchemaAcceptanceTest
             }
             catch ( ConstraintViolationException e )
             {
-                assertEquals( "Unable to add index on [label: MY_LABEL, my_property_key] : Already " +
-                        "indexed :MY_LABEL(my_property_key).", e.getMessage() );
+                assertEquals( "There already exists an index for label 'MY_LABEL' on property 'my_property_key'.",
+                              e.getMessage() );
             }
             tx.success();
         }
@@ -154,7 +167,7 @@ public class SchemaAcceptanceTest
     }
 
     @Test
-    public void shouldThrowConstraintViolationIfAskedToCreateCompoundIdex() throws Exception
+    public void shouldThrowConstraintViolationIfAskedToCreateCompoundIndex() throws Exception
     {
         // WHEN
         Transaction tx = db.beginTx();
@@ -170,6 +183,30 @@ public class SchemaAcceptanceTest
         catch ( UnsupportedOperationException e )
         {
             assertThat( e.getMessage(), containsString( "Compound indexes" ) );
+        }
+        finally
+        {
+            tx.finish();
+        }
+    }
+
+    @Test
+    public void shouldThrowConstraintViolationIfAskedToCreateCompoundConstraint() throws Exception
+    {
+        // WHEN
+        Transaction tx = db.beginTx();
+        try
+        {
+            Schema schema = db.schema();
+            schema.constraintFor( label )
+                    .assertPropertyIsUnique( "my_property_key" )
+                    .assertPropertyIsUnique( "other_property" ).create();
+            tx.success();
+            fail( "Should not be able to create constraint on multiple propertyKey keys" );
+        }
+        catch ( UnsupportedOperationException e )
+        {
+            assertThat( e.getMessage(), containsString( "can only create one unique constraint" ) );
         }
         finally
         {
@@ -312,29 +349,21 @@ public class SchemaAcceptanceTest
         assertThat( getIndexes( db, label ), contains( index ) );
         assertThat( findNodesByLabelAndProperty( label, propertyKey, "Neo", db ), containsOnly( node ) );
     }
-    
+
     @Test
     public void shouldCreateUniquenessConstraint() throws Exception
     {
-        // GIVEN
-
         // WHEN
         ConstraintDefinition constraint = createConstraint( label, propertyKey );
 
         // THEN
-        Transaction tx = db.beginTx();
-        try
+        try ( Transaction tx = db.beginTx() )
         {
             assertEquals( ConstraintType.UNIQUENESS, constraint.getConstraintType() );
 
-            UniquenessConstraintDefinition uniquenessConstraint = constraint.asUniquenessConstraint();
-            assertEquals( label.name(), uniquenessConstraint.getLabel().name() );
-            assertEquals( asSet( propertyKey ), asSet( uniquenessConstraint.getPropertyKeys() ) );
+            assertEquals( label.name(), constraint.getLabel().name() );
+            assertEquals( asSet( propertyKey ), asSet( constraint.getPropertyKeys() ) );
             tx.success();
-        }
-        finally
-        {
-            tx.finish();
         }
     }
     
@@ -385,10 +414,8 @@ public class SchemaAcceptanceTest
         }
         catch ( ConstraintViolationException e )
         {
-            assertEquals(
-                String.format("Unable to create CONSTRAINT ON ( my_label:MY_LABEL ) ASSERT my_label.my_property_key " +
-                    "IS UNIQUE:%nUnable to add index on [label: MY_LABEL, my_property_key] : " +
-                    "Already indexed :MY_LABEL(my_property_key)."), e.getMessage() );
+            assertEquals( format( "There already exists an index for label 'MY_LABEL' on property 'my_property_key'. " +
+                                  "A constraint cannot be created until the index has been dropped." ), e.getMessage() );
         }
     }
 
@@ -416,11 +443,11 @@ public class SchemaAcceptanceTest
         catch ( ConstraintViolationException e )
         {
             assertEquals(
-                String.format( "Unable to create CONSTRAINT ON ( my_label:MY_LABEL ) ASSERT my_label.my_property_key " +
+                format( "Unable to create CONSTRAINT ON ( my_label:MY_LABEL ) ASSERT my_label.my_property_key " +
                         "IS UNIQUE:%nMultiple nodes with label `MY_LABEL` have property `my_property_key` = " +
                         "'value1':%n" +
-                        "  node(1)%n" +
-                        "  node(2)" ), e.getMessage() );
+                        "  node(0)%n" +
+                        "  node(1)" ), e.getMessage() );
         }
     }
 
@@ -438,8 +465,8 @@ public class SchemaAcceptanceTest
         }
         catch ( ConstraintViolationException e )
         {
-            assertEquals( "Already constrained CONSTRAINT ON ( my_label:MY_LABEL ) ASSERT my_label.my_property_key IS" +
-                    " UNIQUE.", e.getMessage() );
+            assertEquals( "Label 'MY_LABEL' and property 'my_property_key' have a unique constraint defined on them.",
+                          e.getMessage() );
         }
     }
 
@@ -457,8 +484,9 @@ public class SchemaAcceptanceTest
         }
         catch ( ConstraintViolationException e )
         {
-            assertEquals( "Unable to add index on [label: MY_LABEL, my_property_key] : Already constrained CONSTRAINT" +
-                    " ON ( my_label:MY_LABEL ) ASSERT my_label.my_property_key IS UNIQUE.", e.getMessage() );
+            assertEquals(
+                    "Label 'MY_LABEL' and property 'my_property_key' have a unique constraint defined on them, so an index is " +
+                    "already created that matches this.", e.getMessage() );
         }
     }
 
@@ -476,8 +504,8 @@ public class SchemaAcceptanceTest
         }
         catch ( ConstraintViolationException e )
         {
-            assertEquals( "Unable to add index on [label: MY_LABEL, my_property_key] : Already indexed " +
-                    ":MY_LABEL(my_property_key).", e.getMessage() );
+            assertEquals( "There already exists an index for label 'MY_LABEL' on property 'my_property_key'.",
+                          e.getMessage() );
         }
     }
 
@@ -506,7 +534,7 @@ public class SchemaAcceptanceTest
         Transaction tx = db.beginTx();
         try
         {
-            ConstraintDefinition constraint = db.schema().constraintFor( label ).on( prop ).unique().create();
+            ConstraintDefinition constraint = db.schema().constraintFor( label ).assertPropertyIsUnique( prop ).create();
             tx.success();
             return constraint;
         }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -30,8 +30,6 @@ import javax.transaction.SystemException;
 import javax.transaction.Transaction;
 import javax.transaction.xa.XAResource;
 
-import org.neo4j.kernel.api.KernelAPI;
-import org.neo4j.kernel.api.operations.StatementState;
 import org.neo4j.kernel.impl.core.LockElement;
 import org.neo4j.kernel.impl.core.NoTransactionState;
 import org.neo4j.kernel.impl.core.TransactionState;
@@ -134,17 +132,6 @@ public class PlaceboTm extends AbstractTransactionManager
     public int getEventIdentifier()
     {
         return 0;
-    }
-
-    @Override
-    public StatementState newStatement()
-    {
-        return null;
-    }
-
-    @Override
-    public void setKernel( KernelAPI kernel )
-    {
     }
 
     @Override

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,54 +21,65 @@ package org.neo4j.kernel.impl.api.integrationtest;
 
 import org.junit.After;
 import org.junit.Before;
+
 import org.neo4j.graphdb.Transaction;
-import org.neo4j.graphdb.schema.IndexDefinition;
+import org.neo4j.graphdb.factory.GraphDatabaseSettings;
 import org.neo4j.kernel.GraphDatabaseAPI;
-import org.neo4j.kernel.ThreadToStatementContextBridge;
-import org.neo4j.kernel.api.KernelAPI;
-import org.neo4j.kernel.api.StatementOperations;
-import org.neo4j.kernel.api.operations.StatementState;
+import org.neo4j.kernel.api.DataWriteOperations;
+import org.neo4j.kernel.api.ReadOperations;
+import org.neo4j.kernel.api.SchemaWriteOperations;
+import org.neo4j.kernel.api.Statement;
+import org.neo4j.kernel.api.TokenWriteOperations;
+import org.neo4j.kernel.api.exceptions.KernelException;
+import org.neo4j.kernel.impl.core.ThreadToStatementContextBridge;
 import org.neo4j.kernel.impl.nioneo.store.NeoStore;
 import org.neo4j.kernel.impl.nioneo.xa.NeoStoreXaDataSource;
 import org.neo4j.kernel.impl.transaction.XaDataSourceManager;
+import org.neo4j.test.TestGraphDatabaseBuilder;
 import org.neo4j.test.TestGraphDatabaseFactory;
 import org.neo4j.test.impl.EphemeralFileSystemAbstraction;
 
-import static java.util.concurrent.TimeUnit.SECONDS;
-
 public abstract class KernelIntegrationTest
 {
+    @SuppressWarnings("deprecation")
     protected GraphDatabaseAPI db;
-    protected StatementOperations statement;
-    protected KernelAPI kernel;
     protected ThreadToStatementContextBridge statementContextProvider;
 
     private Transaction beansTx;
+    private Statement statement;
     private EphemeralFileSystemAbstraction fs;
-    private StatementState state;
 
-    protected StatementState newTransaction()
+    protected TokenWriteOperations tokenWriteOperationsInNewTransaction() throws KernelException
     {
         beansTx = db.beginTx();
-        statement = statementContextProvider.getCtxForWriting().asStatementOperations();
-        return (state = statementContextProvider.statementForWriting());
-    }
-    
-    public StatementState getState()
-    {
-        return state;
+        statement = statementContextProvider.instance();
+        return statement.tokenWriteOperations();
     }
 
-    protected StatementOperations readOnlyContext()
+    protected DataWriteOperations dataWriteOperationsInNewTransaction() throws KernelException
     {
-        StatementOperations context = statementContextProvider.getCtxForReading().asStatementOperations();
-        state = statementContextProvider.statementForReading();
-        return context;
+        beansTx = db.beginTx();
+        statement = statementContextProvider.instance();
+        return statement.dataWriteOperations();
+    }
+
+    protected SchemaWriteOperations schemaWriteOperationsInNewTransaction() throws KernelException
+    {
+        beansTx = db.beginTx();
+        statement = statementContextProvider.instance();
+        return statement.schemaWriteOperations();
+    }
+
+    protected ReadOperations readOperationsInNewTransaction()
+    {
+        beansTx = db.beginTx();
+        statement = statementContextProvider.instance();
+        return statement.readOperations();
     }
 
     protected void commit()
     {
-        statement.close( state );
+        statement.close();
         statement = null;
         beansTx.success();
         beansTx.finish();
@@ -76,7 +87,7 @@ public abstract class KernelIntegrationTest
 
     protected void rollback()
     {
-        statement.close( state );
+        statement.close();
         statement = null;
         beansTx.failure();
         beansTx.finish();
@@ -98,14 +109,20 @@ public abstract class KernelIntegrationTest
 
     protected void startDb()
     {
-        db = (GraphDatabaseAPI) new TestGraphDatabaseFactory().setFileSystem( fs ).newImpermanentDatabase();
+        TestGraphDatabaseBuilder graphDatabaseFactory = (TestGraphDatabaseBuilder) new TestGraphDatabaseFactory().setFileSystem(fs).newImpermanentDatabaseBuilder();
+
+        //noinspection deprecation
+        db = (GraphDatabaseAPI) graphDatabaseFactory.setConfig(GraphDatabaseSettings.cache_type,"none").newGraphDatabase();
         statementContextProvider = db.getDependencyResolver().resolveDependency(
                 ThreadToStatementContextBridge.class );
-        kernel = db.getDependencyResolver().resolveDependency( KernelAPI.class );
     }
 
     protected void stopDb()
     {
+        if ( beansTx != null )
+        {
+            beansTx.finish();
+        }
         db.shutdown();
     }
 
@@ -119,13 +136,5 @@ public abstract class KernelIntegrationTest
     {
         return ((NeoStoreXaDataSource)db.getDependencyResolver().resolveDependency( XaDataSourceManager.class ).getXaDataSource(
                 NeoStoreXaDataSource.DEFAULT_DATA_SOURCE_NAME )).getNeoStore();
-    }
-
-    protected void awaitAllIndexesOnline()
-    {
-        for ( IndexDefinition index : db.schema().getIndexes() )
-        {
-            db.schema().awaitIndexOnline( index, 1, SECONDS );
-        }
     }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,24 +19,24 @@
  */
 package org.neo4j.kernel.impl.cleanup;
 
-import java.io.Closeable;
-import java.io.IOException;
 import java.lang.ref.PhantomReference;
+
+import org.neo4j.graphdb.Resource;
 
 class CleanupReference extends PhantomReference<Object>
 {
     private final ReferenceQueueBasedCleanupService cleanupService;
     private final String referenceDescription;
 
-    private Closeable handler;
+    private Resource resource;
     CleanupReference prev, next;
 
-    CleanupReference( Object referent, ReferenceQueueBasedCleanupService cleanupService, Closeable handler )
+    CleanupReference( Object referent, ReferenceQueueBasedCleanupService cleanupService, Resource resource )
     {
         super( referent, cleanupService.collectedReferences.queue );
         this.referenceDescription = referent.toString();
         this.cleanupService = cleanupService;
-        this.handler = handler;
+        this.resource = resource;
     }
 
     public String description()
@@ -44,14 +44,14 @@ class CleanupReference extends PhantomReference<Object>
         return referenceDescription;
     }
 
-    void cleanupNow( boolean explicit ) throws IOException
+    void cleanupNow( boolean explicit )
     {
         boolean shouldUnlink = false;
         try
         {
             synchronized ( this )
             {
-                if ( handler != null )
+                if ( resource != null )
                 {
                     shouldUnlink = true;
                     if ( !explicit )
@@ -60,11 +60,11 @@ class CleanupReference extends PhantomReference<Object>
                     }
                     try
                     {
-                        handler.close();
+                        resource.close();
                     }
                     finally
                     {
-                        handler = null;
+                        resource = null;
                     }
                 }
             }

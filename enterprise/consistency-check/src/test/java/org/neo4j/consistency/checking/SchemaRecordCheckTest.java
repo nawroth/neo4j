@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -25,13 +25,12 @@ import org.neo4j.consistency.report.ConsistencyReport;
 import org.neo4j.consistency.store.RecordAccessStub;
 import org.neo4j.kernel.api.exceptions.schema.MalformedSchemaRuleException;
 import org.neo4j.kernel.api.index.SchemaIndexProvider;
-import org.neo4j.kernel.impl.nioneo.store.AbstractDynamicStore;
 import org.neo4j.kernel.impl.nioneo.store.DynamicRecord;
 import org.neo4j.kernel.impl.nioneo.store.IndexRule;
 import org.neo4j.kernel.impl.nioneo.store.LabelTokenRecord;
 import org.neo4j.kernel.impl.nioneo.store.PropertyKeyTokenRecord;
 import org.neo4j.kernel.impl.nioneo.store.SchemaRule;
-import org.neo4j.kernel.impl.nioneo.store.SchemaStore;
+import org.neo4j.kernel.impl.nioneo.store.SchemaStorage;
 import org.neo4j.kernel.impl.nioneo.store.UniquenessConstraintRule;
 
 import static org.mockito.Mockito.mock;
@@ -44,17 +43,13 @@ public class SchemaRecordCheckTest
 {
     public SchemaRecordCheckTest()
     {
-        super( new SchemaRecordCheck( configureSchemaStore() ), ConsistencyReport.SchemaConsistencyReport.class );
+        super( new SchemaRecordCheck( configureSchemaStore() ),
+                ConsistencyReport.SchemaConsistencyReport.class );
     }
 
-
-    public static SchemaStore configureSchemaStore()
+    public static SchemaStorage configureSchemaStore()
     {
-        @SuppressWarnings( "unchecked" )
-        SchemaStore mock = mock( SchemaStore.class );
-        when( mock.getRecordSize() ).thenReturn( SchemaStore.BLOCK_SIZE + AbstractDynamicStore.BLOCK_HEADER_SIZE );
-        when( mock.getRecordHeaderSize() ).thenReturn( AbstractDynamicStore.BLOCK_HEADER_SIZE );
-        return mock;
+        return mock( SchemaStorage.class );
     }
 
     @Test

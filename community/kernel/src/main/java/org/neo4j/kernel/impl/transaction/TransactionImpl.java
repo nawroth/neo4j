@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -38,9 +38,7 @@ import javax.transaction.xa.XAResource;
 import javax.transaction.xa.Xid;
 
 import org.neo4j.helpers.Exceptions;
-import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.exceptions.TransactionFailureException;
-import org.neo4j.kernel.api.operations.StatementState;
+import org.neo4j.helpers.Pair;
 import org.neo4j.kernel.impl.core.TransactionState;
 import org.neo4j.kernel.impl.nioneo.xa.NeoStoreXaDataSource;
 import org.neo4j.kernel.impl.transaction.xaframework.ForceMode;
@@ -55,14 +53,14 @@ class TransactionImpl implements Transaction
     private static final int RS_READONLY = 3; // set in prepare
 
     private final byte globalId[];
-    private int status = Status.STATUS_ACTIVE;
-    private volatile boolean active = true;
     private boolean globalStartRecordWritten = false;
+    private final LinkedList<ResourceElement> resourceList = new LinkedList<>();
 
-    private final LinkedList<ResourceElement> resourceList =
-            new LinkedList<ResourceElement>();
-    private List<Synchronization> syncHooks =
-            new ArrayList<Synchronization>();
+    private int status = Status.STATUS_ACTIVE;
+    // volatile since at least toString is unsynchronized and reads it,
+    // but all logical operations are guarded with synchronization
+    private volatile boolean active = true;
+    private List<Synchronization> syncHooks = new ArrayList<>();
 
     private final int eventIdentifier;
 
@@ -72,15 +70,14 @@ class TransactionImpl implements Transaction
     private Thread owner;
 
     private final TransactionState state;
-    private KernelTransaction transactionContext;
 
-    TransactionImpl( TxManager txManager, ForceMode forceMode, TransactionStateFactory stateFactory,
+    TransactionImpl( byte[] xidGlobalId, TxManager txManager, ForceMode forceMode, TransactionStateFactory stateFactory,
                      StringLogger logger )
     {
         this.txManager = txManager;
         this.logger = logger;
         this.state = stateFactory.create( this );
-        globalId = XidImpl.getNewGlobalId();
+        globalId = xidGlobalId;
         eventIdentifier = txManager.getNextEventIdentifier();
         this.forceMode = forceMode;
         owner = Thread.currentThread();
@@ -105,13 +102,17 @@ class TransactionImpl implements Transaction
     {
         return state;
     }
+    
+    private String getStatusAsString()
+    {
+        return txManager.getTxStatusAsString( status ) + (active ? "" : " (suspended)");
+    }
 
     @Override
     public String toString()
     {
-
         return String.format( "Transaction(%d, owner:\"%s\")[%s,Resources=%d]",
-                eventIdentifier, owner.getName(), txManager.getTxStatusAsString( status ), resourceList.size() );
+                eventIdentifier, owner.getName(), getStatusAsString(), resourceList.size() );
     }
 
     @Override
@@ -119,14 +120,7 @@ class TransactionImpl implements Transaction
             HeuristicMixedException, HeuristicRollbackException,
             IllegalStateException, SystemException
     {
-        try
-        {
-            transactionContext.commit();
-        }
-        catch ( TransactionFailureException e )
-        {
-            throw e.unBoxedForCommit();
-        }
+        txManager.commit();
     }
 
     boolean isGlobalStartRecordWritten()
@@ -138,14 +132,7 @@ class TransactionImpl implements Transaction
     public synchronized void rollback() throws IllegalStateException,
             SystemException
     {
-        try
-        {
-            transactionContext.rollback();
-        }
-        catch ( TransactionFailureException e )
-        {
-            throw e.unBoxedForRollback();
-        }
+        txManager.rollback();
     }
 
     @Override
@@ -156,87 +143,36 @@ class TransactionImpl implements Transaction
         {
             throw new IllegalArgumentException( "Null xa resource" );
         }
-        if ( status == Status.STATUS_ACTIVE ||
-                status == Status.STATUS_PREPARING )
+        if ( status == Status.STATUS_ACTIVE || status == Status.STATUS_PREPARING )
         {
             try
             {
                 if ( resourceList.size() == 0 )
-                {
-                    if ( !globalStartRecordWritten )
-                    {
-                        txManager.writeStartRecord( globalId );
-                        globalStartRecordWritten = true;
-                    }
-                    //
-                    byte branchId[] = txManager.getBranchId( xaRes );
-                    Xid xid = new XidImpl( globalId, branchId );
-                    resourceList.add( new ResourceElement( xid, xaRes ) );
-                    xaRes.start( xid, XAResource.TMNOFLAGS );
-                    try
-                    {
-                        txManager.getTxLog().addBranch( globalId, branchId );
-                    }
-                    catch ( IOException e )
-                    {
-                        logger.error( "Error writing transaction log", e );
-                        txManager.setTmNotOk( e );
-                        throw Exceptions.withCause( new SystemException( "TM encountered a problem, "
-                                + " error writing transaction log" ), e );
-                    }
-                    // TODO ties HA to our TxManager
-                    if ( !hasAnyLocks() )
-                    {
-                        getState().getTxHook().initializeTransaction( eventIdentifier );
-                    }
-                    return true;
-                }
-                Xid sameRmXid = null;
-                for ( ResourceElement re : resourceList )
-                {
-                    if ( sameRmXid == null && re.getResource().isSameRM( xaRes ) )
-                    {
-                        sameRmXid = re.getXid();
-                    }
-                    if ( xaRes == re.getResource() )
-                    {
-                        if ( re.getStatus() == RS_SUSPENDED )
-                        {
-                            xaRes.start( re.getXid(), XAResource.TMRESUME );
-                        }
-                        else
-                        {
-                            // either enlisted or delisted
-                            // is TMJOIN correct then?
-                            xaRes.start( re.getXid(), XAResource.TMJOIN );
-                        }
-                        re.setStatus( RS_ENLISTED );
-                        return true;
-                    }
-                }
-                if ( sameRmXid != null ) // should we join?
-                {
-                    addResourceToList( sameRmXid, xaRes );
-                    xaRes.start( sameRmXid, XAResource.TMJOIN );
+                {   // This is the first enlisted resource
+                    ensureGlobalTxStartRecordWritten();
+                    registerAndStartResource( xaRes );
                 }
                 else
-                // new branch
-                {
-                    // ResourceElement re = resourceList.getFirst();
-                    byte branchId[] = txManager.getBranchId( xaRes );
-                    Xid xid = new XidImpl( globalId, branchId );
-                    addResourceToList( xid, xaRes );
-                    xaRes.start( xid, XAResource.TMNOFLAGS );
-                    try
-                    {
-                        txManager.getTxLog().addBranch( globalId, branchId );
+                {   // There are other enlisted resources. We have to check if any of them have the same Xid
+                    Pair<Xid,ResourceElement> similarResource = findAlreadyRegisteredSimilarResource( xaRes );
+                    if ( similarResource.other() != null )
+                    {   // This exact resource is already enlisted
+                        ResourceElement resource = similarResource.other();
+                        
+                        // TODO either enlisted or delisted. is TMJOIN correct then?
+                        xaRes.start( resource.getXid(), resource.getStatus() == RS_SUSPENDED ?
+                                XAResource.TMRESUME : XAResource.TMJOIN );
+                        resource.setStatus( RS_ENLISTED );
                     }
-                    catch ( IOException e )
+                    else if ( similarResource.first() != null )
+                    {   // A similar resource, but not the exact same instance is already registered
+                        Xid xid = similarResource.first();
+                        addResourceToList( xid, xaRes );
+                        xaRes.start( xid, XAResource.TMJOIN );
+                    }
+                    else
                     {
-                        logger.error( "Error writing transaction log", e );
-                        txManager.setTmNotOk( e );
-                        throw Exceptions.withCause( new SystemException( "TM encountered a problem, "
-                                + " error writing transaction log" ), e );
+                        registerAndStartResource( xaRes );
                     }
                 }
                 return true;
@@ -252,11 +188,56 @@ class TransactionImpl implements Transaction
                 status == Status.STATUS_ROLLEDBACK ||
                 status == Status.STATUS_MARKED_ROLLBACK )
         {
-            throw new RollbackException( "Tx status is: "
-                    + txManager.getTxStatusAsString( status ) );
+            throw new RollbackException( "Tx status is: " + txManager.getTxStatusAsString( status ) );
         }
-        throw new IllegalStateException( "Tx status is: "
-                + txManager.getTxStatusAsString( status ) );
+        throw new IllegalStateException( "Tx status is: " + txManager.getTxStatusAsString( status ) );
+    }
+
+    private Pair<Xid, ResourceElement> findAlreadyRegisteredSimilarResource( XAResource xaRes ) throws XAException
+    {
+        Xid sameXid = null;
+        ResourceElement sameResource = null;
+        for ( ResourceElement re : resourceList )
+        {
+            if ( sameXid == null && re.getResource().isSameRM( xaRes ) )
+            {
+                sameXid = re.getXid();
+            }
+            if ( xaRes == re.getResource() )
+            {
+                sameResource = re;
+            }
+        }
+        return sameXid == null && sameResource == null ?
+                Pair.<Xid,ResourceElement>empty() : Pair.of( sameXid, sameResource );
+    }
+
+    private void registerAndStartResource( XAResource xaRes ) throws XAException, SystemException
+    {
+        byte branchId[] = txManager.getBranchId( xaRes );
+        Xid xid = new XidImpl( globalId, branchId );
+        addResourceToList( xid, xaRes );
+        xaRes.start( xid, XAResource.TMNOFLAGS );
+        try
+        {
+            txManager.getTxLog().addBranch( globalId, branchId );
+        }
+        catch ( IOException e )
+        {
+            logger.error( "Error writing transaction log", e );
+            txManager.setTmNotOk( e );
+            throw Exceptions.withCause( new SystemException( "TM encountered a problem, "
+                    + " error writing transaction log" ), e );
+        }
+    }
+
+    private void ensureGlobalTxStartRecordWritten() throws SystemException
+    {
+        if ( !globalStartRecordWritten )
+        {
+            txManager.writeStartRecord( globalId );
+            globalStartRecordWritten = true;
+        }
     }
 
     private void addResourceToList( Xid xid, XAResource xaRes )
@@ -338,8 +319,7 @@ class TransactionImpl implements Transaction
     }
 
     private boolean beforeCompletionRunning = false;
-    private List<Synchronization> syncHooksAdded =
-            new ArrayList<Synchronization>();
+    private List<Synchronization> syncHooksAdded = new ArrayList<>();
 
     @Override
     public synchronized void registerSynchronization( Synchronization s )
@@ -396,7 +376,7 @@ class TransactionImpl implements Transaction
             while ( !syncHooksAdded.isEmpty() )
             {
                 List<Synchronization> addedHooks = syncHooksAdded;
-                syncHooksAdded = new ArrayList<Synchronization>();
+                syncHooksAdded = new ArrayList<>();
                 for ( Synchronization s : addedHooks )
                 {
                     s.beforeCompletion();
@@ -503,7 +483,7 @@ class TransactionImpl implements Transaction
         {
             // prepare
             status = Status.STATUS_PREPARING;
-            LinkedList<Xid> preparedXids = new LinkedList<Xid>();
+            LinkedList<Xid> preparedXids = new LinkedList<>();
             for ( ResourceElement re : resourceList )
             {
                 if ( !preparedXids.contains( re.getXid() ) )
@@ -579,7 +559,7 @@ class TransactionImpl implements Transaction
     void doRollback() throws XAException
     {
         status = Status.STATUS_ROLLING_BACK;
-        LinkedList<Xid> rolledbackXids = new LinkedList<Xid>();
+        LinkedList<Xid> rolledbackXids = new LinkedList<>();
         for ( ResourceElement re : resourceList )
         {
             if ( !rolledbackXids.contains( re.getXid() ) )
@@ -589,27 +569,6 @@ class TransactionImpl implements Transaction
             }
         }
         status = Status.STATUS_ROLLEDBACK;
-    }
-
-    public StatementState newStatement()
-    {
-        return transactionContext.newStatementState();
-    }
-
-    /*
-     * There is a circular dependency between creating the transaction context and this
-     * transactionimpl. As we move forward with introducing the KernelAPI, having TransactionImpl
-     * and TxManager handle TransactionContext like this should be refactored and moved to a point
-     * where the Neo4j transaction handling lives cleanly under the Kernel API, and is not tied to
-     * threads. The thread-bound, JTA-based, transaction management should probably live outside
-     * the kernel API entirely.
-     *
-     * However, in the spirit of baby steps, we hook into the current tx infrastructure at a few
-     * points to not have to do the full move in one step.
-     */
-    public void setTransactionContext( KernelTransaction transactionContext )
-    {
-        this.transactionContext = transactionContext;
     }
 
     private static class ResourceElement
@@ -727,18 +686,11 @@ class TransactionImpl implements Transaction
         }
     }
 
-    public boolean hasAnyLocks()
-    {
-        return getState().getTxHook().hasAnyLocks( this );
-    }
-
     public void finish( boolean successful )
     {
-        getState().getTxHook().finishTransaction( getEventIdentifier(), successful );
-    }
-
-    public KernelTransaction getTransactionContext()
-    {
-        return transactionContext;
+        if ( state.isRemotelyInitialized() )
+        {
+            getState().getTxHook().remotelyFinishTransaction( eventIdentifier, successful );
+        }
     }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -39,7 +39,7 @@ import org.neo4j.graphdb.Traverser.Order;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 
-public class CircularGraphTest extends AbstractTestBase
+public class CircularGraphTest extends TraversalTestBase
 {
     @Before
     public void createTheGraph()

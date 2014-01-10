@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -20,8 +20,8 @@
 package org.neo4j.kernel.api.exceptions.schema;
 
 import org.neo4j.kernel.api.exceptions.KernelException;
-import org.neo4j.kernel.api.operations.KeyNameLookup;
-import org.neo4j.kernel.impl.api.index.IndexDescriptor;
+import org.neo4j.kernel.api.TokenNameLookup;
+import org.neo4j.kernel.api.index.IndexDescriptor;
 
 import static java.lang.String.format;
 
@@ -37,9 +37,9 @@ public class DropIndexFailureException extends SchemaKernelException
     }
 
     @Override
-    public String getUserMessage( KeyNameLookup keyNameLookup )
+    public String getUserMessage( TokenNameLookup tokenNameLookup )
     {
-        return format( message, indexDescriptor.userDescription( keyNameLookup ),
-                ((KernelException) getCause()).getUserMessage( keyNameLookup ) );
+        return format( message, indexDescriptor.userDescription( tokenNameLookup ),
+                ((KernelException) getCause()).getUserMessage( tokenNameLookup ) );
     }
 }

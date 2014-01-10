@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -36,7 +36,9 @@ import org.neo4j.cluster.client.ClusterClient;
 import org.neo4j.cluster.member.ClusterMemberEvents;
 import org.neo4j.cluster.member.ClusterMemberListener;
 import org.neo4j.cluster.member.paxos.PaxosClusterMemberEvents;
+import org.neo4j.cluster.protocol.atomicbroadcast.ObjectStreamFactory;
 import org.neo4j.cluster.protocol.cluster.ClusterConfiguration;
+import org.neo4j.cluster.protocol.cluster.ClusterEntryDeniedException;
 import org.neo4j.cluster.protocol.cluster.ClusterListener;
 import org.neo4j.cluster.protocol.election.NotElectableElectionCredentialsProvider;
 import org.neo4j.helpers.Args;
@@ -95,15 +97,17 @@ public final class HaBackupProvider extends BackupExtensionService
         params.put( ClusterSettings.server_id.name(), "-1" );
         params.put( ClusterSettings.cluster_name.name(), clusterName );
         params.put( ClusterSettings.initial_hosts.name(), from );
+        params.put( ClusterSettings.instance_name.name(), "Backup");
         params.put(ClusterClient.clusterJoinTimeout.name(), "20s");
         final Config config = new Config( params,
                 ClusterSettings.class, OnlineBackupSettings.class );
 
+        ObjectStreamFactory objectStreamFactory = new ObjectStreamFactory();
         final ClusterClient clusterClient = life.add( new ClusterClient( ClusterClient.adapt( config ), logging,
-                new NotElectableElectionCredentialsProvider() ) );
+                new NotElectableElectionCredentialsProvider(), objectStreamFactory, objectStreamFactory ) );
         ClusterMemberEvents events = life.add( new PaxosClusterMemberEvents( clusterClient, clusterClient,
                 clusterClient, clusterClient, new SystemOutLogging(),
-                Predicates.<PaxosClusterMemberEvents.ClusterMembersSnapshot>TRUE(), null ) );
+                Predicates.<PaxosClusterMemberEvents.ClusterMembersSnapshot>TRUE(), null, objectStreamFactory, objectStreamFactory ) );
 
         // Refresh the snapshot once we join
         clusterClient.addClusterListener( new ClusterListener.Adapter()
@@ -171,7 +175,15 @@ public final class HaBackupProvider extends BackupExtensionService
         }
         catch ( LifecycleException e )
         {
-            Throwable ex = Exceptions.peel( e, Exceptions.exceptionsOfType( TimeoutException.class ) );
+            Throwable ex = Exceptions.peel( e, Exceptions.exceptionsOfType( LifecycleException.class ) );
+
+            if (ex != null && ex instanceof ClusterEntryDeniedException)
+            {
+                // Someone else is doing a backup
+                throw new RuntimeException( "Another backup client is currently performing backup; concurrent backups are not allowed" );
+            }
+
+            ex = Exceptions.peel( e, Exceptions.exceptionsOfType( TimeoutException.class ) );
             if ( ex != null )
             {
                 throw new RuntimeException( "Could not find backup server in cluster " + clusterName + " at " + from + ", " +

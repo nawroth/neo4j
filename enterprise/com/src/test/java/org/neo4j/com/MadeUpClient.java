@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -85,7 +85,7 @@ public class MadeUpClient extends Client<MadeUpCommunicationInterface> implement
 
     private RequestContext getRequestContext()
     {
-        return new RequestContext( EMPTY.getSessionId(), EMPTY.machineId(), EMPTY.getEventIdentifier(),
+        return new RequestContext( EMPTY.getEpoch(), EMPTY.machineId(), EMPTY.getEventIdentifier(),
                 new RequestContext.Tx[] { lastAppliedTx( NeoStoreXaDataSource.DEFAULT_DATA_SOURCE_NAME, 1 ) }, EMPTY.getMasterId(),
                 EMPTY.getChecksum() );
     }

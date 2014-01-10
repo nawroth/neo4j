@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,8 +19,10 @@
  */
 package org.neo4j.server.rest;
 
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 
 import org.junit.Test;
 
@@ -49,41 +51,43 @@ import static org.neo4j.server.rest.domain.JsonHelper.jsonToMap;
 public class SchemaConstraintsDocIT extends AbstractRestFunctionalTestBase
 {
     /**
-     * Create property uniqueness constraint.
+     * Create uniqueness constraint.
+     * Create a uniqueness constraint on a property.
      */
     @Documented
     @Test
     @GraphDescription.Graph( nodes = {} )
-    public void create_property_uniqueness_constraint() throws PropertyValueException
+    public void createPropertyUniquenessConstraint() throws PropertyValueException
     {
         data.get();
 
-        String labelName = "person", propertyKey = "name";
+        String labelName = "Person", propertyKey = "name";
         Map<String, Object> definition = map( "property_keys", asList( propertyKey ) );
 
-        String result = gen.get().expectedStatus( 200 ).payload( createJsonFrom( definition ) ).post(
+        String result = gen.get().noGraph().expectedStatus( 200 ).payload( createJsonFrom( definition ) ).post(
                 getSchemaConstraintLabelUniquenessUri( labelName ) ).entity();
 
         Map<String, Object> serialized = jsonToMap( result );
         assertEquals( labelName, serialized.get( "label" ) );
         assertEquals( ConstraintType.UNIQUENESS.name(), serialized.get( "type" ) );
-        assertEquals( asList( propertyKey ), serialized.get( "property-keys" ) );
+        assertEquals( asList( propertyKey ), serialized.get( "property_keys" ) );
     }
 
     /**
-     * Get a specific uniqueness constraints for a label and a property
+     * Get a specific uniqueness constraint.
+     * Get a specific uniqueness constraint for a label and a property.
      */
     @Documented
     @Test
     @GraphDescription.Graph( nodes = {} )
-    public void get_label_uniqueness_property_constraint() throws PropertyValueException
+    public void getLabelUniquenessPropertyConstraint() throws PropertyValueException
     {
         data.get();
 
-        String labelName = "user", propertyKey = "name";
+        String labelName = "User", propertyKey = "name";
         createLabelUniquenessPropertyConstraint( labelName, propertyKey );
 
-        String result = gen.get().expectedStatus( 200 ).get(
+        String result = gen.get().noGraph().expectedStatus( 200 ).get(
                 getSchemaConstraintLabelUniquenessPropertyUri( labelName, propertyKey ) ).entity();
 
         List<Map<String, Object>> serializedList = jsonToList( result );
@@ -91,25 +95,25 @@ public class SchemaConstraintsDocIT extends AbstractRestFunctionalTestBase
         Map<String, Object> serialized = serializedList.get( 0 );
         assertEquals( labelName, serialized.get( "label" ) );
         assertEquals( ConstraintType.UNIQUENESS.name(), serialized.get( "type" ) );
-        assertEquals( asList( propertyKey ), serialized.get( "property-keys" ) );
+        assertEquals( asList( propertyKey ), serialized.get( "property_keys" ) );
     }
 
     /**
-     * Get all uniqueness constraints for a label
+     * Get all uniqueness constraints for a label.
      */
     @SuppressWarnings( "unchecked" )
     @Documented
     @Test
     @GraphDescription.Graph( nodes = {} )
-    public void get_label_uniqueness_property_constraints() throws PropertyValueException
+    public void getLabelUniquenessPropertyConstraints() throws PropertyValueException
     {
         data.get();
 
-        String labelName = "user", propertyKey1 = "name1", propertyKey2 = "name2";
+        String labelName = "User", propertyKey1 = "name1", propertyKey2 = "name2";
         createLabelUniquenessPropertyConstraint( labelName, propertyKey1 );
         createLabelUniquenessPropertyConstraint( labelName, propertyKey2 );
 
-        String result = gen.get().expectedStatus( 200 ).get( getSchemaConstraintLabelUniquenessUri( labelName ) ).entity();
+        String result = gen.get().noGraph().expectedStatus( 200 ).get( getSchemaConstraintLabelUniquenessUri( labelName ) ).entity();
 
         List<Map<String, Object>> serializedList = jsonToList( result );
 
@@ -118,32 +122,32 @@ public class SchemaConstraintsDocIT extends AbstractRestFunctionalTestBase
         Map<String, Object> serialized1 = serializedList.get( 0 );
         assertEquals( labelName, serialized1.get( "label" ) );
         assertEquals( ConstraintType.UNIQUENESS.name(), serialized1.get( "type" ) );
-        List<String> keyList1 = (List<String>) serialized1.get( "property-keys" );
+        List<String> keyList1 = (List<String>) serialized1.get( "property_keys" );
 
         Map<String, Object> serialized2 = serializedList.get( 1 );
         assertEquals( labelName, serialized2.get( "label" ) );
         assertEquals( ConstraintType.UNIQUENESS.name(), serialized2.get( "type" ) );
-        List<String> keyList2 = (List<String>) serialized2.get( "property-keys" );
+        List<String> keyList2 = (List<String>) serialized2.get( "property_keys" );
 
         assertEquals( asSet( asList( propertyKey1 ), asList( propertyKey2 ) ), asSet( keyList1, keyList2 ) );
     }
 
     /**
-     * Get all constraints for a label
+     * Get all constraints for a label.
      */
     @SuppressWarnings( "unchecked" )
     @Documented
     @Test
     @GraphDescription.Graph( nodes = {} )
-    public void get_label_property_constraints() throws PropertyValueException
+    public void getLabelPropertyConstraints() throws PropertyValueException
     {
         data.get();
 
-        String labelName = "user", propertyKey1 = "name1", propertyKey2 = "name2";
+        String labelName = "User", propertyKey1 = "name1", propertyKey2 = "name2";
         createLabelUniquenessPropertyConstraint( labelName, propertyKey1 );
         createLabelUniquenessPropertyConstraint( labelName, propertyKey2 );
 
-        String result = gen.get().expectedStatus( 200 ).get( getSchemaConstraintLabelUri( labelName ) ).entity();
+        String result = gen.get().noGraph().expectedStatus( 200 ).get( getSchemaConstraintLabelUri( labelName ) ).entity();
 
         List<Map<String, Object>> serializedList = jsonToList( result );
 
@@ -152,18 +156,18 @@ public class SchemaConstraintsDocIT extends AbstractRestFunctionalTestBase
         Map<String, Object> serialized1 = serializedList.get( 0 );
         assertEquals( labelName, serialized1.get( "label" ) );
         assertEquals( ConstraintType.UNIQUENESS.name(), serialized1.get( "type" ) );
-        List<String> keyList1 = (List<String>) serialized1.get( "property-keys" );
+        List<String> keyList1 = (List<String>) serialized1.get( "property_keys" );
 
         Map<String, Object> serialized2 = serializedList.get( 1 );
         assertEquals( labelName, serialized2.get( "label" ) );
         assertEquals( ConstraintType.UNIQUENESS.name(), serialized2.get( "type" ) );
-        List<String> keyList2 = (List<String>) serialized2.get( "property-keys" );
+        List<String> keyList2 = (List<String>) serialized2.get( "property_keys" );
 
         assertEquals( asSet( asList( propertyKey1 ), asList( propertyKey2 ) ), asSet( keyList1, keyList2 ) );
     }
 
     /**
-     * Get all constraints
+     * Get all constraints.
      */
     @SuppressWarnings( "unchecked" )
     @Documented
@@ -173,32 +177,37 @@ public class SchemaConstraintsDocIT extends AbstractRestFunctionalTestBase
     {
         data.get();
 
-        String labelName1 = "user", propertyKey1 = "name1";
-        String labelName2 = "prog", propertyKey2 = "name2";
+        String labelName1 = "User", propertyKey1 = "name1";
+        String labelName2 = "Prog", propertyKey2 = "name2";
         createLabelUniquenessPropertyConstraint( labelName1, propertyKey1 );
         createLabelUniquenessPropertyConstraint( labelName2, propertyKey2 );
 
-        String result = gen.get().expectedStatus( 200 ).get( getSchemaConstraintUri() ).entity();
+        String result = gen.get().noGraph().expectedStatus( 200 ).get( getSchemaConstraintUri() ).entity();
 
         List<Map<String, Object>> serializedList = jsonToList( result );
 
         assertEquals( 2, serializedList.size() );
 
+        Set<String> labelNames = new HashSet<>();
+        Set<List<String>> propertyKeys = new HashSet<>();
+
         Map<String, Object> serialized1 = serializedList.get( 0 );
-        assertEquals( labelName1, serialized1.get( "label" ) );
+        labelNames.add( (String) serialized1.get( "label" ) );
+        propertyKeys.add( (List<String>) serialized1.get( "property_keys" ) );
         assertEquals( ConstraintType.UNIQUENESS.name(), serialized1.get( "type" ) );
-        List<String> keyList1 = (List<String>) serialized1.get( "property-keys" );
 
         Map<String, Object> serialized2 = serializedList.get( 1 );
-        assertEquals( labelName2, serialized2.get( "label" ) );
+        labelNames.add( (String) serialized2.get( "label" ) );
+        propertyKeys.add( (List<String>) serialized2.get( "property_keys" ) );
         assertEquals( ConstraintType.UNIQUENESS.name(), serialized2.get( "type" ) );
-        List<String> keyList2 = (List<String>) serialized2.get( "property-keys" );
 
-        assertEquals( asSet( asList( propertyKey1 ), asList( propertyKey2 ) ), asSet( keyList1, keyList2 ) );
+        assertEquals( asSet( labelName1, labelName2 ), labelNames );
+        assertEquals( asSet( asList( propertyKey1 ), asList( propertyKey2 ) ), propertyKeys );
     }
 
     /**
-     * Drop uniqueness constraint for a label and a property
+     * Drop constraint.
+     * Drop uniqueness constraint for a label and a property.
      */
     @Documented
     @Test
@@ -212,18 +221,18 @@ public class SchemaConstraintsDocIT extends AbstractRestFunctionalTestBase
                 propertyKey );
         assertThat( getConstraints( graphdb(), label( labelName ) ), containsOnly( constraintDefinition ) );
 
-        gen.get().expectedStatus( 204 ).delete( getSchemaConstraintLabelUniquenessPropertyUri( labelName, propertyKey ) ).entity();
+        gen.get().noGraph().expectedStatus( 204 ).delete( getSchemaConstraintLabelUniquenessPropertyUri( labelName, propertyKey ) ).entity();
 
         assertThat( getConstraints( graphdb(), label( labelName ) ), isEmpty() );
     }
 
     /**
-     * Create a schema index for a label and property key which already exists.
+     * Create an index for a label and property key which already exists.
      */
     @Test
-    public void create_existing_constraint() throws PropertyValueException
+    public void create_existing_constraint()
     {
-        String labelName = "mylabel", propertyKey = "name";
+        String labelName = "Mylabel", propertyKey = "name";
         createLabelUniquenessPropertyConstraint( labelName, propertyKey );
     }
 
@@ -234,34 +243,29 @@ public class SchemaConstraintsDocIT extends AbstractRestFunctionalTestBase
         String labelName = "ALabel", propertyKey = "name";
 
         // WHEN
-        gen.get().expectedStatus( 404 ).delete( getSchemaConstraintLabelUniquenessPropertyUri( labelName, propertyKey ) );
+        gen.get().noGraph().expectedStatus( 404 ).delete( getSchemaConstraintLabelUniquenessPropertyUri( labelName, propertyKey ) );
     }
 
     /**
-     * Create a compound schema index should not yet be supported
+     * Creating a compound index should not yet be supported.
      */
     @Test
-    public void create_compound_schema_index() throws PropertyValueException
+    public void create_compound_schema_index()
     {
         Map<String, Object> definition = map( "property_keys", asList( "first", "other" ) );
 
-        gen.get().expectedStatus( 400 ).payload( createJsonFrom( definition ) ).post(
+        gen.get().noGraph().expectedStatus( 400 ).payload( createJsonFrom( definition ) ).post(
                 getSchemaIndexLabelUri( "a_label" ) );
     }
 
     private ConstraintDefinition createLabelUniquenessPropertyConstraint( String labelName, String propertyKey )
     {
-        Transaction tx = graphdb().beginTx();
-        try
+        try ( Transaction tx = graphdb().beginTx() )
         {
-            ConstraintDefinition constraintDefinition = graphdb().schema().constraintFor( label( labelName ) ).unique
-                    ().on( propertyKey ).create();
+            ConstraintDefinition constraintDefinition = graphdb().schema().constraintFor( label( labelName ) )
+                    .assertPropertyIsUnique( propertyKey ).create();
             tx.success();
             return constraintDefinition;
-        }
-        finally
-        {
-            tx.finish();
         }
     }
 }

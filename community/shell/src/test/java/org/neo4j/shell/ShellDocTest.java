@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -22,23 +22,27 @@ package org.neo4j.shell;
 import java.io.PrintWriter;
 
 import org.junit.Test;
-
 import org.neo4j.graphdb.GraphDatabaseService;
+import org.neo4j.graphdb.Relationship;
+import org.neo4j.graphdb.Transaction;
 import org.neo4j.helpers.Settings;
+import org.neo4j.helpers.collection.Iterables;
 import org.neo4j.kernel.GraphDatabaseAPI;
 import org.neo4j.shell.impl.CollectingOutput;
 import org.neo4j.shell.impl.RemoteClient;
 import org.neo4j.shell.kernel.GraphDatabaseShellServer;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.tooling.GlobalGraphOperations;
 
 import static org.hamcrest.CoreMatchers.containsString;
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.neo4j.shell.ShellLobby.NO_INITIAL_SESSION;
 import static org.neo4j.shell.ShellLobby.remoteLocation;
-import static org.neo4j.visualization.asciidoc.AsciidocHelper.createGraphVizWithNodeId;
+import static org.neo4j.visualization.asciidoc.AsciidocHelper.createGraphViz;
 
 public class ShellDocTest
 {
@@ -128,6 +132,7 @@ public class ShellDocTest
         final GraphDatabaseShellServer server = new GraphDatabaseShellServer( db, false );
 
         Documenter doc = new Documenter( "sample session", server );
+        doc.add( "mknode --cd", "", "Create a node");
         doc.add( "pwd", "", "where are we?" );
         doc.add( "set name \"Jon\"", "", "On the current node, set the key \"name\" to value \"Jon\"" );
         doc.add( "start n=node(0) return n;", "Jon", "send a cypher query" );
@@ -143,9 +148,9 @@ public class ShellDocTest
         doc.add( "ls -avr", "KNOWS", "verbose list relationships" );
         db.beginTx();
         doc.run();
-        doc.add( "rmnode -f 0", "", "delete node 0 (reference node)" );
-        doc.add( "cd", "", "cd back to the reference node" );
-        doc.add( "pwd", "(?)", "the reference node doesn't exist now" );
+        doc.add( "rmnode -f 0", "", "delete node 0" );
+        doc.add( "cd 0", "", "cd back to node 0" );
+        doc.add( "pwd", "(?)", "the node doesn't exist now" );
         doc.add( "mknode --cd --np \"{'name':'Neo'}\"", "", "create a new node and go to it" );
         server.shutdown();
         db.shutdown();
@@ -157,13 +162,15 @@ public class ShellDocTest
         GraphDatabaseAPI db = (GraphDatabaseAPI)new TestGraphDatabaseFactory().newImpermanentDatabase();
         final GraphDatabaseShellServer server = new GraphDatabaseShellServer( db, false );
 
-        db.beginTx();
-        Documenter doc = new Documenter( "simple cypher result dump", server );
-        doc.add( "mknode --cd --np \"{'name':'Neo'}\"", "", "create a new node and go to it" );
-        doc.add( "mkrel -c -d i -t LIKES --np \"{'app':'foobar'}\"", "", "create a relationship" );
-        doc.add( "dump START n=node({self}) MATCH (n)-[r]-(m) return n,r,m;",
-                "create (_1 {`name`:\"Neo\"})", "Export the cypher statement results" );
-        doc.run();
+        try ( Transaction tx = db.beginTx() )
+        {
+            Documenter doc = new Documenter( "simple cypher result dump", server );
+            doc.add( "mknode --cd --np \"{'name':'Neo'}\"", "", "create a new node and go to it" );
+            doc.add( "mkrel -c -d i -t LIKES --np \"{'app':'foobar'}\"", "", "create a relationship" );
+            doc.add( "dump START n=node({self}) MATCH (n)-[r]-(m) return n,r,m;",
+                    "create (_0 {`name`:\"Neo\"})", "Export the cypher statement results" );
+            doc.run();
+        }
         server.shutdown();
         db.shutdown();
     }
@@ -174,14 +181,13 @@ public class ShellDocTest
         GraphDatabaseAPI db = (GraphDatabaseAPI)new TestGraphDatabaseFactory().newImpermanentDatabase();
         final GraphDatabaseShellServer server = new GraphDatabaseShellServer( db, false );
 
-        db.beginTx();
         Documenter doc = new Documenter( "database dump", server );
         doc.add( "create index on :Person(name);", "", "create an index" );
         doc.add( "create (m:Person:Hacker {name:'Mattias'}), (m)-[:KNOWS]->(m);", "", "create one labeled node and a relationship" );
         doc.add( "dump", "begin" +
-                NL +"create index on :`Person`(`name`);" +
-                NL +"create (_1:`Person`:`Hacker` {`name`:\"Mattias\"})" +
-                NL +"create _1-[:`KNOWS`]->_1" +
+                NL +"create index on :`Person`(`name`)" +
+                NL +"create (_0:`Person`:`Hacker` {`name`:\"Mattias\"})" +
+                NL +"create _0-[:`KNOWS`]->_0" +
                 NL +";" +
                 NL +"commit", "Export the whole database including indexes" );
         doc.run();
@@ -197,6 +203,7 @@ public class ShellDocTest
         final GraphDatabaseShellServer server = new GraphDatabaseShellServer( db, false );
 
         Documenter doc = new Documenter( "a matrix example", server );
+        doc.add("mknode --cd", "", "Create a reference node");
         doc.add( "mkrel -t ROOT -c -v", "created",
                 "create the Thomas Andersson node" );
         doc.add( "cd 1", "", "go to the new node" );
@@ -251,15 +258,37 @@ public class ShellDocTest
 //                "return zionist.name;",
 //                "ColumnFilter",
 //                "profile the query by displaying more query execution information" );
-        db.beginTx();
-        doc.run();
+        doc.run(); // wrapping this in a tx will cause problems, so we don't
         server.shutdown();
-        PrintWriter writer = doc.getWriter( "shell-matrix-example-graph" );
-        db.beginTx();
-        writer.println( createGraphVizWithNodeId( "Shell Matrix Example", db,
-                "graph" ) );
-        writer.flush();
-        writer.close();
+
+        try (Transaction tx = db.beginTx())
+        {
+            assertEquals( 7, Iterables.count( GlobalGraphOperations.at( db ).getAllRelationships() ) );
+            assertEquals( 7, Iterables.count( GlobalGraphOperations.at( db ).getAllNodes() ) );
+            boolean foundRootAndNeoRelationship = false;
+            for ( Relationship relationship : GlobalGraphOperations.at( db )
+                    .getAllRelationships() )
+            {
+                if ( relationship.getType().name().equals( "ROOT" ) )
+                {
+                    foundRootAndNeoRelationship = true;
+                    assertFalse( "The root node should not have a name property.", relationship.getStartNode()
+                            .hasProperty( "name" ) );
+                    assertEquals( "Thomas Andersson", relationship.getEndNode()
+                            .getProperty( "name", null ) );
+                }
+            }
+            assertTrue( "Could not find the node connecting the root and Neo nodes.", foundRootAndNeoRelationship );
+            tx.success();
+        }
+        
+        try ( PrintWriter writer = doc.getWriter( "shell-matrix-example-graph" );
+                Transaction tx = db.beginTx() )
+        {
+            writer.println( createGraphViz( "Shell Matrix Example", db, "graph" ) );
+            writer.flush();
+            tx.success();
+        }
         db.shutdown();
     }
 

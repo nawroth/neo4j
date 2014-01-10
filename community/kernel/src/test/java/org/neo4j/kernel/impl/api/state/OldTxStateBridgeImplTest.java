@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,20 +21,19 @@ package org.neo4j.kernel.impl.api.state;
 
 import org.junit.Test;
 
-import org.neo4j.kernel.impl.api.DiffSets;
+import org.neo4j.kernel.impl.util.DiffSets;
 import org.neo4j.kernel.impl.core.NodeImpl;
 import org.neo4j.kernel.impl.core.WritableTransactionState;
-import org.neo4j.kernel.impl.nioneo.store.PropertyDatas;
 import org.neo4j.kernel.logging.DevNullLoggingService;
 
 import static org.junit.Assert.assertEquals;
 
 import static org.neo4j.helpers.collection.IteratorUtil.asSet;
 import static org.neo4j.helpers.collection.IteratorUtil.emptySetOf;
+import static org.neo4j.kernel.api.properties.Property.intProperty;
 
 public class OldTxStateBridgeImplTest
 {
-
     @Test
     public void shouldListNodesWithPropertyAdded() throws Exception
     {
@@ -50,7 +49,7 @@ public class OldTxStateBridgeImplTest
         NodeImpl node = new NodeImpl( nodeId );
 
         // And Given that I've added a relevant property
-        state.getOrCreateCowPropertyAddMap( node ).put( 2, PropertyDatas.forInt( propertyKey, -1l, value ) );
+        state.getOrCreateCowPropertyAddMap( node ).put( 2, intProperty( propertyKey, value ) );
 
         // When
         DiffSets<Long> nodes = bridge.getNodesWithChangedProperty( propertyKey, value );
@@ -75,7 +74,7 @@ public class OldTxStateBridgeImplTest
         NodeImpl node = new NodeImpl( nodeId );
 
         // And Given that I've added a relevant property
-        state.getOrCreateCowPropertyRemoveMap( node ).put( 2, PropertyDatas.forInt( propertyKey, -1l, value ) );
+        state.getOrCreateCowPropertyRemoveMap( node ).put( 2, intProperty( propertyKey, value ) );
 
         // When
         DiffSets<Long> nodes = bridge.getNodesWithChangedProperty( propertyKey, value );
@@ -100,8 +99,7 @@ public class OldTxStateBridgeImplTest
         NodeImpl node = new NodeImpl( nodeId );
 
         // And Given that I've added a relevant property
-        state.getOrCreateCowPropertyAddMap( node ).put( 2, PropertyDatas.forInt( propertyKey, -1l,
-        /*other value*/7331 ) );
+        state.getOrCreateCowPropertyAddMap( node ).put( 2, intProperty( propertyKey, /*other value*/7331 ) );
 
         // When
         DiffSets<Long> nodes = bridge.getNodesWithChangedProperty( propertyKey, value );

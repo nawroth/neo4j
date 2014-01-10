@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -135,7 +135,7 @@ public class StoreUpgraderTestIT
                     new DatabaseFiles( fileSystem ) ).attemptUpgrade( new File( dbDirectory, NeoStore.DEFAULT_NAME ) );
             fail( "Should throw exception" );
         }
-        catch ( StoreUpgrader.UnableToUpgradeException e )
+        catch ( StoreUpgrader.UnexpectedUpgradingStoreVersionException e )
         {
             // expected
         }
@@ -159,7 +159,7 @@ public class StoreUpgraderTestIT
                     new DatabaseFiles( fileSystem ) ).attemptUpgrade( new File( dbDirectory, NeoStore.DEFAULT_NAME ) );
             fail( "Should throw exception" );
         }
-        catch ( StoreUpgrader.UnableToUpgradeException e )
+        catch ( StoreUpgrader.UpgradingStoreVersionNotFoundException e )
         {
             // expected
         }
@@ -183,7 +183,7 @@ public class StoreUpgraderTestIT
                     new DatabaseFiles( fileSystem ) ).attemptUpgrade( new File( dbDirectory, NeoStore.DEFAULT_NAME ) );
             fail( "Should throw exception" );
         }
-        catch ( StoreUpgrader.UnableToUpgradeException e )
+        catch ( StoreUpgrader.UpgradingStoreVersionNotFoundException e )
         {
             // expected
         }

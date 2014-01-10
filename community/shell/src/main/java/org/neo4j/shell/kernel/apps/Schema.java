@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -26,7 +26,6 @@ import org.neo4j.graphdb.Label;
 import org.neo4j.graphdb.schema.ConstraintDefinition;
 import org.neo4j.graphdb.schema.IndexDefinition;
 import org.neo4j.graphdb.schema.Schema.IndexState;
-import org.neo4j.graphdb.schema.UniquenessConstraintDefinition;
 import org.neo4j.helpers.Function;
 import org.neo4j.helpers.Predicate;
 import org.neo4j.shell.AppCommandParser;
@@ -260,14 +259,7 @@ public class Schema extends TransactionProvidingApp
             return true;
         }
 
-        switch ( constraint.getConstraintType() )
-        {
-            case UNIQUENESS:
-                UniquenessConstraintDefinition typedConstraint = constraint.asUniquenessConstraint();
-                return indexOf( property, typedConstraint.getPropertyKeys() ) != -1;
-            default:
-                return false;
-        }
+        return indexOf( property, constraint.getPropertyKeys() ) != -1;
     }
 
     private Iterable<IndexDefinition> indexesByLabel( org.neo4j.graphdb.schema.Schema schema, Label[] labels )

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -27,6 +27,25 @@ public class DynamicRecord extends Abstract64BitRecord
     private long nextBlock = Record.NO_NEXT_BLOCK.intValue();
     private int type;
     private boolean startRecord = true;
+
+    public static DynamicRecord dynamicRecord( long id, boolean inUse )
+    {
+        DynamicRecord record = new DynamicRecord( id );
+        record.setInUse( inUse );
+        return record;
+    }
+
+    public static DynamicRecord dynamicRecord( long id, boolean inUse, boolean isStartRecord, long nextBlock, int type,
+                                               byte [] data )
+    {
+        DynamicRecord record = new DynamicRecord( id );
+        record.setInUse( inUse );
+        record.setStartRecord( isStartRecord );
+        record.setNextBlock( nextBlock );
+        record.setType( type );
+        record.setData( data );
+        return record;
+    }
 
     public DynamicRecord( long id )
     {

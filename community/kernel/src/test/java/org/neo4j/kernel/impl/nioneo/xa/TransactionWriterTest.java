@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -60,14 +60,14 @@ public class TransactionWriterTest
     {
         // given
         InMemoryLogBuffer buffer = new InMemoryLogBuffer();
-        TransactionWriter writer = new TransactionWriter( buffer, 1 );
+        TransactionWriter writer = new TransactionWriter( buffer, 1, -1 );
 
         NodeRecord node = new NodeRecord( 0, -1, -1 );
         node.setLabelField( 0, Collections.<DynamicRecord>emptyList() );
         RelationshipRecord relationship = new RelationshipRecord( 0, 1, 1, 6 );
 
         // when
-        writer.start( 1, 1 );
+        writer.start( 1, 1, 0 );
         writer.create( node );
         writer.update( relationship );
         writer.delete( propertyRecordWithOneIntProperty( 3, 10, 45 ), new PropertyRecord( 3 ) );

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -24,11 +24,13 @@ import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URI;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.Map;
 import java.util.Set;
 
+import org.codehaus.jackson.JsonNode;
 import org.junit.Test;
 import org.mockito.internal.stubbing.answers.ThrowsException;
 
@@ -40,8 +42,9 @@ import org.neo4j.graphdb.ResourceIterator;
 import org.neo4j.kernel.impl.util.StringLogger;
 import org.neo4j.kernel.impl.util.TestLogger;
 import org.neo4j.server.rest.transactional.error.Neo4jError;
-import org.neo4j.server.rest.transactional.error.StatusCode;
+import org.neo4j.server.rest.transactional.error.Status;
 import org.neo4j.test.mocking.GraphMock;
+import org.neo4j.test.mocking.Link;
 
 import static java.util.Arrays.asList;
 
@@ -53,10 +56,12 @@ import static org.mockito.Mockito.when;
 
 import static org.neo4j.helpers.collection.MapUtil.map;
 import static org.neo4j.kernel.impl.util.TestLogger.LogCall.error;
+import static org.neo4j.server.rest.domain.JsonHelper.jsonNode;
 import static org.neo4j.test.Property.property;
+import static org.neo4j.test.mocking.GraphMock.link;
 import static org.neo4j.test.mocking.GraphMock.node;
 import static org.neo4j.test.mocking.GraphMock.path;
-import static org.neo4j.test.mocking.Link.link;
+import static org.neo4j.test.mocking.GraphMock.relationship;
 import static org.neo4j.test.mocking.Properties.properties;
 
 public class ExecutionResultSerializerTest
@@ -66,7 +71,7 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, org.neo4j.kernel.impl.util
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, org.neo4j.kernel.impl.util
                 .StringLogger.DEV_NULL );
 
         // when
@@ -83,7 +88,7 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         ExecutionResult executionResult = mockExecutionResult( map(
                 "column1", "value1",
@@ -91,7 +96,7 @@ public class ExecutionResultSerializerTest
 
         // when
         serializer.transactionCommitUri( URI.create( "commit/uri/1" ) );
-        serializer.statementResult( executionResult );
+        serializer.statementResult( executionResult, false );
         serializer.finish();
 
         // then
@@ -105,14 +110,14 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         ExecutionResult executionResult = mockExecutionResult( map(
                 "column1", "value1",
                 "column2", "value2" ) );
 
         // when
-        serializer.statementResult( executionResult );
+        serializer.statementResult( executionResult, false );
         serializer.finish();
 
         // then
@@ -126,7 +131,7 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         ExecutionResult executionResult = mockExecutionResult( map(
                 "column1", "value1",
@@ -134,15 +139,15 @@ public class ExecutionResultSerializerTest
 
         // when
         serializer.transactionCommitUri( URI.create( "commit/uri/1" ) );
-        serializer.statementResult( executionResult );
-        serializer.errors( asList( new Neo4jError( StatusCode.INVALID_REQUEST_FORMAT, new Exception( "cause1" ) ) ) );
+        serializer.statementResult( executionResult, false );
+        serializer.errors( asList( new Neo4jError( Status.Request.InvalidFormat, new Exception( "cause1" ) ) ) );
         serializer.finish();
 
         // then
         String result = output.toString( "UTF-8" );
         assertEquals( "{\"commit\":\"commit/uri/1\",\"results\":[{\"columns\":[\"column1\",\"column2\"]," +
                       "\"data\":[{\"row\":[\"value1\",\"value2\"]}]}]," +
-                      "\"errors\":[{\"code\":40001,\"status\":\"INVALID_REQUEST_FORMAT\",\"message\":\"cause1\"}]}",
+                      "\"errors\":[{\"code\":\"Neo.ClientError.Request.InvalidFormat\",\"message\":\"cause1\"}]}",
                       result );
     }
 
@@ -151,22 +156,22 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         ExecutionResult executionResult = mockExecutionResult( map(
                 "column1", "value1",
                 "column2", "value2" ) );
 
         // when
-        serializer.statementResult( executionResult );
-        serializer.errors( asList( new Neo4jError( StatusCode.INVALID_REQUEST_FORMAT, new Exception( "cause1" ) ) ) );
+        serializer.statementResult( executionResult, false );
+        serializer.errors( asList( new Neo4jError( Status.Request.InvalidFormat, new Exception( "cause1" ) ) ) );
         serializer.finish();
 
         // then
         String result = output.toString( "UTF-8" );
         assertEquals( "{\"results\":[{\"columns\":[\"column1\",\"column2\"]," +
                       "\"data\":[{\"row\":[\"value1\",\"value2\"]}]}]," +
-                      "\"errors\":[{\"code\":40001,\"status\":\"INVALID_REQUEST_FORMAT\",\"message\":\"cause1\"}]}",
+                      "\"errors\":[{\"code\":\"Neo.ClientError.Request.InvalidFormat\",\"message\":\"cause1\"}]}",
                       result );
     }
 
@@ -175,17 +180,16 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         // when
         serializer.transactionCommitUri( URI.create( "commit/uri/1" ) );
-        serializer.errors( asList( new Neo4jError( StatusCode.INVALID_REQUEST_FORMAT, new Exception( "cause1" ) ) ) );
+        serializer.errors( asList( new Neo4jError( Status.Request.InvalidFormat, new Exception( "cause1" ) ) ) );
         serializer.finish();
 
         // then
         String result = output.toString( "UTF-8" );
-        assertEquals( "{\"commit\":\"commit/uri/1\",\"results\":[],\"errors\":[{\"code\":40001," +
-                      "\"status\":\"INVALID_REQUEST_FORMAT\"," +
+        assertEquals( "{\"commit\":\"commit/uri/1\",\"results\":[],\"errors\":[{\"code\":\"Neo.ClientError.Request.InvalidFormat\"," +
                       "\"message\":\"cause1\"}]}", result );
     }
 
@@ -194,16 +198,16 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         // when
-        serializer.errors( asList( new Neo4jError( StatusCode.INVALID_REQUEST_FORMAT, new Exception( "cause1" ) ) ) );
+        serializer.errors( asList( new Neo4jError( Status.Request.InvalidFormat, new Exception( "cause1" ) ) ) );
         serializer.finish();
 
         // then
         String result = output.toString( "UTF-8" );
         assertEquals(
-                "{\"results\":[],\"errors\":[{\"code\":40001,\"status\":\"INVALID_REQUEST_FORMAT\",\"message\":\"cause1\"}]}",
+                "{\"results\":[],\"errors\":[{\"code\":\"Neo.ClientError.Request.InvalidFormat\",\"message\":\"cause1\"}]}",
                 result );
     }
 
@@ -212,7 +216,7 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         // when
         serializer.finish();
@@ -227,7 +231,7 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         ExecutionResult executionResult = mockExecutionResult( map(
                 "column1", "value1",
@@ -236,7 +240,7 @@ public class ExecutionResultSerializerTest
                 "column2", "value4" ) );
 
         // when
-        serializer.statementResult( executionResult );
+        serializer.statementResult( executionResult, false );
         serializer.finish();
 
         // then
@@ -251,7 +255,7 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         ExecutionResult executionResult1 = mockExecutionResult( map(
                 "column1", "value1",
@@ -261,8 +265,8 @@ public class ExecutionResultSerializerTest
                 "column4", "value4" ) );
 
         // when
-        serializer.statementResult( executionResult1 );
-        serializer.statementResult( executionResult2 );
+        serializer.statementResult( executionResult1, false );
+        serializer.statementResult( executionResult2, false );
         serializer.finish();
 
         // then
@@ -278,7 +282,7 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         ExecutionResult executionResult = mockExecutionResult( map(
                 "node", node( 1, properties(
@@ -289,7 +293,7 @@ public class ExecutionResultSerializerTest
                 property( "e", new String[]{"a", "b", "ääö"} ) ) ) ) );
 
         // when
-        serializer.statementResult( executionResult );
+        serializer.statementResult( executionResult, false );
         serializer.finish();
 
         // then
@@ -304,13 +308,13 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         ExecutionResult executionResult = mockExecutionResult( map(
                 "path", mockPath( map( "key1", "value1" ), map( "key2", "value2" ), map( "key3", "value3" ) ) ) );
 
         // when
-        serializer.statementResult( executionResult );
+        serializer.statementResult( executionResult, false );
         serializer.finish();
 
         // then
@@ -325,7 +329,7 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         Map<String, Object> data = map(
                 "column1", "value1",
@@ -341,12 +345,12 @@ public class ExecutionResultSerializerTest
         // when
         try
         {
-            serializer.statementResult( executionResult );
+            serializer.statementResult( executionResult, false );
             fail( "should have thrown exception" );
         }
         catch ( RuntimeException e )
         {
-            serializer.errors( asList( new Neo4jError( StatusCode.INTERNAL_STATEMENT_EXECUTION_ERROR, e ) ) );
+            serializer.errors( asList( new Neo4jError( Status.Statement.ExecutionFailure, e ) ) );
         }
         serializer.finish();
 
@@ -354,7 +358,7 @@ public class ExecutionResultSerializerTest
         String result = output.toString( "UTF-8" );
         assertEquals(
                 "{\"results\":[{\"columns\":[\"column1\",\"column2\"],\"data\":[{\"row\":[\"value1\",\"value2\"]}]}]," +
-                "\"errors\":[{\"code\":50001,\"status\":\"INTERNAL_STATEMENT_EXECUTION_ERROR\",\"message\":\"Stuff went wrong!\",\"stackTrace\":***}]}",
+                "\"errors\":[{\"code\":\"Neo.DatabaseError.Statement.ExecutionFailure\",\"message\":\"Stuff went wrong!\",\"stackTrace\":***}]}",
                 replaceStackTrace( result, "***" ) );
     }
 
@@ -363,7 +367,7 @@ public class ExecutionResultSerializerTest
     {
         // given
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         Map<String, Object> data = map(
                 "column1", "value1",
@@ -380,12 +384,12 @@ public class ExecutionResultSerializerTest
         // when
         try
         {
-            serializer.statementResult( executionResult );
+            serializer.statementResult( executionResult, false );
             fail( "should have thrown exception" );
         }
         catch ( RuntimeException e )
         {
-            serializer.errors( asList( new Neo4jError( StatusCode.INTERNAL_STATEMENT_EXECUTION_ERROR, e ) ) );
+            serializer.errors( asList( new Neo4jError( Status.Statement.ExecutionFailure, e ) ) );
         }
         serializer.finish();
 
@@ -393,7 +397,7 @@ public class ExecutionResultSerializerTest
         String result = output.toString( "UTF-8" );
         assertEquals(
                 "{\"results\":[{\"columns\":[\"column1\",\"column2\"],\"data\":[{\"row\":[\"value1\",\"value2\"]}]}]," +
-                "\"errors\":[{\"code\":50001,\"status\":\"INTERNAL_STATEMENT_EXECUTION_ERROR\",\"message\":\"Stuff went wrong!\"," +
+                "\"errors\":[{\"code\":\"Neo.DatabaseError.Statement.ExecutionFailure\",\"message\":\"Stuff went wrong!\"," +
                 "\"stackTrace\":***}]}",
                 replaceStackTrace( result, "***" ) );
     }
@@ -408,16 +412,16 @@ public class ExecutionResultSerializerTest
                 node( 2, properties( property( "name", "node2" ) ), "This", "That" ),
                 node( 3, properties( property( "name", "node3" ) ), "Other" )};
         Relationship[] rel = {
-                GraphMock.relationship( 0, node[0], "KNOWS", node[1], property( "name", "rel0" ) ),
-                GraphMock.relationship( 1, node[2], "LOVES", node[3], property( "name", "rel1" ) )};
+                relationship( 0, node[0], "KNOWS", node[1], property( "name", "rel0" ) ),
+                relationship( 1, node[2], "LOVES", node[3], property( "name", "rel1" ) )};
 
         ByteArrayOutputStream output = new ByteArrayOutputStream();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, StringLogger.DEV_NULL );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, StringLogger.DEV_NULL );
 
         // when
         serializer.statementResult( mockExecutionResult(
                 map( "node", node[0], "rel", rel[0] ),
-                map( "node", node[2], "rel", rel[1] ) ), ResultDataContent.row, ResultDataContent.graph );
+                map( "node", node[2], "rel", rel[1] ) ), false, ResultDataContent.row, ResultDataContent.graph );
         serializer.finish();
 
         // then
@@ -451,13 +455,91 @@ public class ExecutionResultSerializerTest
     }
 
     @Test
+    public void shouldProduceResultStreamWithLegacyRestFormat() throws Exception
+    {
+        // given
+        Node[] node = {
+                node( 0, properties( property( "name", "node0" ) ) ),
+                node( 1, properties( property( "name", "node1" ) ) ),
+                node( 2, properties( property( "name", "node2" ) ) )};
+        Relationship[] rel = {
+                relationship( 0, node[0], "KNOWS", node[1], property( "name", "rel0" ) ),
+                relationship( 1, node[2], "LOVES", node[1], property( "name", "rel1" ) )};
+        Path path = GraphMock.path( node[0], link( rel[0], node[1] ), link( rel[1], node[2] ) );
+
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer(
+                output, URI.create( "http://base.uri/" ), StringLogger.DEV_NULL );
+
+        // when
+        serializer.statementResult( mockExecutionResult(
+                map( "node", node[0], "rel", rel[0], "path", path, "map", map( "n1", node[1], "r1", rel[1] ) )
+        ), false, ResultDataContent.rest );
+        serializer.finish();
+
+        // then
+        String result = output.toString( "UTF-8" );
+        JsonNode json = jsonNode( result );
+        Map<String, Integer> columns = new HashMap<>();
+        int col = 0;
+        JsonNode results = json.get( "results" ).get( 0 );
+        for ( JsonNode column : results.get( "columns" ) )
+        {
+            columns.put( column.getTextValue(), col++ );
+        }
+        JsonNode row = results.get( "data" ).get( 0 ).get( "rest" );
+        JsonNode jsonNode = row.get( columns.get( "node" ) );
+        JsonNode jsonRel = row.get( columns.get( "rel" ) );
+        JsonNode jsonPath = row.get( columns.get( "path" ) );
+        JsonNode jsonMap = row.get( columns.get( "map" ) );
+        assertEquals( "http://base.uri/node/0", jsonNode.get( "self" ).getTextValue() );
+        assertEquals( "http://base.uri/relationship/0", jsonRel.get( "self" ).getTextValue() );
+        assertEquals( 2, jsonPath.get( "length" ).getNumberValue() );
+        assertEquals( "http://base.uri/node/0", jsonPath.get( "start" ).getTextValue() );
+        assertEquals( "http://base.uri/node/2", jsonPath.get( "end" ).getTextValue() );
+        assertEquals( "http://base.uri/node/1", jsonMap.get( "n1" ).get( "self" ).getTextValue() );
+        assertEquals( "http://base.uri/relationship/1", jsonMap.get( "r1" ).get( "self" ).getTextValue() );
+    }
+
+    @Test
+    public void shouldProduceResultStreamWithLegacyRestFormatAndNestedMaps() throws Exception
+    {
+        // given
+        ByteArrayOutputStream output = new ByteArrayOutputStream();
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer(
+                output, URI.create( "http://base.uri/" ), StringLogger.DEV_NULL );
+
+        // when
+        serializer.statementResult( mockExecutionResult(
+                // RETURN {one:{two:['wait for it...', {three: 'GO!'}]}}
+                map( "map", map("one", map( "two", asList("wait for it...", map("three", "GO!") ) ) ) )
+        ), false, ResultDataContent.rest );
+        serializer.finish();
+
+        // then
+        String result = output.toString( "UTF-8" );
+        JsonNode json = jsonNode( result );
+        Map<String, Integer> columns = new HashMap<>();
+        int col = 0;
+        JsonNode results = json.get( "results" ).get( 0 );
+        for ( JsonNode column : results.get( "columns" ) )
+        {
+            columns.put( column.getTextValue(), col++ );
+        }
+        JsonNode row = results.get( "data" ).get( 0 ).get( "rest" );
+        JsonNode jsonMap = row.get( columns.get( "map" ) );
+        assertEquals( "wait for it...", jsonMap.get( "one" ).get( "two" ).get( 0 ).asText() );
+        assertEquals( "GO!", jsonMap.get( "one" ).get( "two" ).get( 1 ).get( "three" ).asText() );
+    }
+
+    @Test
     public void shouldLogIOErrors() throws Exception
     {
         // given
         IOException failure = new IOException();
         OutputStream output = mock( OutputStream.class, new ThrowsException( failure ) );
         TestLogger log = new TestLogger();
-        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, log );
+        ExecutionResultSerializer serializer = new ExecutionResultSerializer( output, null, log );
 
         // when
         serializer.finish();
@@ -513,9 +595,9 @@ public class ExecutionResultSerializerTest
     {
         Node startNode = node( 1, properties( startNodeProperties ) );
         Node endNode = node( 2, properties( endNodeProperties ) );
-        Relationship relationship = GraphMock.relationship( 1, properties( relationshipProperties ),
-                                                            startNode, "RELATED", endNode );
-        return path( startNode, link( relationship, endNode ) );
+        Relationship relationship = relationship( 1, properties( relationshipProperties ),
+                                                  startNode, "RELATED", endNode );
+        return path( startNode, Link.link( relationship, endNode ) );
     }
 
     private String replaceStackTrace( String json, String matchableStackTrace )

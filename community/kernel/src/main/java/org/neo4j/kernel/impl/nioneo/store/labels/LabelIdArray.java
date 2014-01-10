@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -70,5 +70,18 @@ public class LabelIdArray
             }
         }
         return result;
+    }
+
+    public static long[] prependNodeId( long nodeId, long[] labelIds )
+    {
+        long[] result = new long[ labelIds.length + 1 ];
+        arraycopy( labelIds, 0, result, 1, labelIds.length );
+        result[0] = nodeId;
+        return result;
+    }
+
+    public static long[] stripNodeId( long[] storedLongs )
+    {
+        return Arrays.copyOfRange( storedLongs, 1, storedLongs.length );
     }
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -26,6 +26,7 @@ import java.io.OutputStream;
 import java.io.Reader;
 import java.io.Writer;
 import java.nio.channels.FileChannel;
+import java.util.zip.ZipOutputStream;
 
 import org.neo4j.helpers.Function;
 
@@ -74,5 +75,7 @@ public interface FileSystemAbstraction
     interface ThirdPartyFileSystem
     {
         void close();
+
+        void dumpToZip( ZipOutputStream zip, byte[] scratchPad ) throws IOException;
     }
 }

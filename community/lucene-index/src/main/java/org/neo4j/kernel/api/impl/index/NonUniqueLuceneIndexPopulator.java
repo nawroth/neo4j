@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -24,6 +24,8 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.neo4j.kernel.api.index.IndexEntryConflictException;
+import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.api.index.NodePropertyUpdate;
 import org.neo4j.kernel.api.index.util.FailureStorage;
 
@@ -31,7 +33,7 @@ class NonUniqueLuceneIndexPopulator extends LuceneIndexPopulator
 {
     static final int DEFAULT_QUEUE_THRESHOLD = 10000;
     private final int queueThreshold;
-    private final List<NodePropertyUpdate> updates = new ArrayList<NodePropertyUpdate>();
+    private final List<NodePropertyUpdate> updates = new ArrayList<>();
 
     NonUniqueLuceneIndexPopulator( int queueThreshold, LuceneDocumentStructure documentStructure,
                                    LuceneIndexWriterFactory indexWriterFactory,
@@ -45,22 +47,43 @@ class NonUniqueLuceneIndexPopulator extends LuceneIndexPopulator
     @Override
     public void add( long nodeId, Object propertyValue ) throws IOException
     {
-        writer.addDocument( documentStructure.newDocument( nodeId, propertyValue ) );
+        writer.addDocument( documentStructure.newDocumentRepresentingProperty( nodeId, propertyValue ) );
     }
 
     @Override
-    public void update( Iterable<NodePropertyUpdate> updates ) throws IOException
+    public void verifyDeferredConstraints() throws IndexEntryConflictException, IOException
     {
-        for ( NodePropertyUpdate update : updates )
-        {
-            this.updates.add( update );
-        }
+        // no constraints to verify so do nothing
+    }
 
-        if ( this.updates.size() > queueThreshold )
+    @Override
+    public IndexUpdater newPopulatingUpdater() throws IOException
+    {
+        return new IndexUpdater()
         {
-            flush();
-            this.updates.clear();
-        }
+            @Override
+            public void process( NodePropertyUpdate update ) throws IOException, IndexEntryConflictException
+            {
+                updates.add( update );
+            }
+
+            @Override
+            public void close() throws IOException, IndexEntryConflictException
+            {
+                if ( updates.size() > queueThreshold )
+                {
+                    flush();
+                    updates.clear();
+                }
+
+            }
+
+            @Override
+            public void remove( Iterable<Long> nodeIds ) throws IOException
+            {
+                throw new UnsupportedOperationException( "Should not remove() from populating index." );
+            }
+        };
     }
 
     @Override
@@ -72,15 +95,17 @@ class NonUniqueLuceneIndexPopulator extends LuceneIndexPopulator
             switch ( update.getUpdateMode() )
             {
             case ADDED:
-                writer.addDocument( documentStructure.newDocument( nodeId, update.getValueAfter() ) );
-                break;
             case CHANGED:
+                // We don't look at the "before" value, so adding and changing idempotently is done the same way.
                 writer.updateDocument( documentStructure.newQueryForChangeOrRemove( nodeId ),
-                                       documentStructure.newDocument( nodeId, update.getValueAfter() ) );
+                                       documentStructure.newDocumentRepresentingProperty( nodeId,
+                                               update.getValueAfter() ) );
                 break;
             case REMOVED:
                 writer.deleteDocuments( documentStructure.newQueryForChangeOrRemove( nodeId ) );
                 break;
+            default:
+                throw new IllegalStateException( "Unknown update mode " + update.getUpdateMode() );
             }
         }
     }

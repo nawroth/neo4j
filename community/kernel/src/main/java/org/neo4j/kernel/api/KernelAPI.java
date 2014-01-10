@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -22,42 +22,19 @@ package org.neo4j.kernel.api;
 
 /**
  * The main API through which access to the Neo4j kernel is made, both read
- * and write operations are supported as well as transactions.
+ * and write operations are supported as well as creating transactions.
  * 
  * Changes to the graph (i.e. write operations) are performed via a
  * {@link #newTransaction() transaction context} where changes done
- * inside the transaction are visible in read operations for {@link StatementOperations statements}
- * executed within that transaction context. Once {@link KernelTransaction#finish() committed}
- * those changes are applied to the graph storage and made visible to all other transactions.
- * 
- * Read operations not associated with any particular transaction can be performed via
- * the {@link #newReadOnlyStatementContext() read-only statement context}.
+ * inside the transaction are visible in read operations for {@link Statement statements}
+ * executed within that transaction context.
  */
 public interface KernelAPI
 {
-    /**
-     * Hook for actions to take place when the database is fully functional and any recovery has completed.
-     */
-    void bootstrapAfterRecovery();
-    
+
     /**
      * Creates and returns a new {@link KernelTransaction} capable of modifying the
-     * underlying graph. Changes made in it are visible within the transaction and can
-     * be committed or rolled back.
-     * 
-     * @return a new {@link KernelTransaction} for modifying the underlying graph.
+     * underlying graph.
      */
     KernelTransaction newTransaction();
-
-    /**
-     * Returns a {@link StatementOperations context} that can be used for read operations
-     * that aren't associated with any specific transaction. Write operations on this
-     * statement will throw exception.
-     * 
-     * @return a new {@link StatementOperations} used for read operations not associated
-     * with any transaction.
-     */
-    StatementOperationParts statementOperations();
-
-    StatementOperationParts readOnlyStatementOperations();
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -48,7 +48,8 @@ public final class PrimitivesBean extends ManagementBeanProvider
         PrimitivesImpl( ManagementData management ) throws NotCompliantMBeanException
         {
             super( management );
-            this.nodeManager = management.getKernelData().graphDatabase().getNodeManager();
+            this.nodeManager = management.getKernelData().graphDatabase().getDependencyResolver()
+                    .resolveDependency( NodeManager.class );
         }
 
         private final NodeManager nodeManager;

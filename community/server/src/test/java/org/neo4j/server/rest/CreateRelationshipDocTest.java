@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -60,14 +60,9 @@ public class CreateRelationshipDocTest extends
         gen.get().expectedStatus(
                 Status.CREATED.getStatusCode() ).payload( jsonString ).post(
                 getNodeUri( i ) + "/relationships" );
-        Transaction transaction = graphdb().beginTx();
-        try
+        try ( Transaction tx = graphdb().beginTx() )
         {
             assertTrue( i.hasRelationship( DynamicRelationshipType.withName( "LOVES" ) ) );
-        }
-        finally
-        {
-            transaction.finish();
         }
     }
 
@@ -90,14 +85,9 @@ public class CreateRelationshipDocTest extends
         String entity = gen.get().expectedStatus(
                 Status.CREATED.getStatusCode() ).payload( jsonString ).post(
                 getNodeUri( i ) + "/relationships" ).entity();
-        Transaction transaction = graphdb().beginTx();
-        try
+        try ( Transaction tx = graphdb().beginTx() )
         {
             assertTrue( i.hasRelationship( DynamicRelationshipType.withName( "LOVES" ) ) );
-        }
-        finally
-        {
-            transaction.finish();
         }
         assertProperRelationshipRepresentation( JsonHelper.jsonToMap( entity ) );
     }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -41,6 +41,7 @@ import static org.hamcrest.core.IsInstanceOf.instanceOf;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.fail;
+
 import static org.neo4j.index.Neo4jTestCase.assertContains;
 import static org.neo4j.index.impl.lucene.Contains.contains;
 
@@ -75,7 +76,7 @@ public class TestIndexDeletion
         {
             worker.rollback();
             worker.die();
-            worker.shutdown();
+            worker.close();
         }
     }
 
@@ -111,7 +112,7 @@ public class TestIndexDeletion
         value = "my own value";
         node = graphDb.createNode();
         index.add( node, key, value );
-        workers = new ArrayList<WorkThread>();
+        workers = new ArrayList<>();
     }
 
     public void beginTx()

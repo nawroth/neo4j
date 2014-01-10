@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -24,15 +24,13 @@ import java.net.URI;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
-
+import org.neo4j.helpers.Clock;
 import org.neo4j.kernel.impl.util.StringLogger;
 import org.neo4j.server.rest.transactional.error.InvalidConcurrentTransactionAccess;
 import org.neo4j.server.rest.web.TransactionUriScheme;
 import org.neo4j.test.DoubleLatch;
-import org.neo4j.tooling.Clock;
 
 import static javax.xml.bind.DatatypeConverter.parseLong;
-
 import static org.junit.Assert.fail;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -47,7 +45,7 @@ public class ConcurrentTransactionAccessTest
                 new TransactionHandleRegistry( mock( Clock.class), 0, StringLogger.DEV_NULL );
         TransitionalPeriodTransactionMessContainer kernel = mock( TransitionalPeriodTransactionMessContainer.class );
         when(kernel.newTransaction()).thenReturn( mock(TransitionalTxManagementKernelTransaction.class) );
-        TransactionFacade actions = new TransactionFacade( kernel, null, registry, null );
+        TransactionFacade actions = new TransactionFacade( kernel, null, registry, null, null );
 
         final TransactionHandle transactionHandle = actions.newTransactionHandle( new DisgustingUriScheme() );
 

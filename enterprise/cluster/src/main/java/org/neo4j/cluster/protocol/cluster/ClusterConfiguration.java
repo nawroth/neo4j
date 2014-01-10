@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -32,6 +32,7 @@ import org.neo4j.cluster.InstanceId;
 import org.neo4j.helpers.Function;
 import org.neo4j.helpers.Predicate;
 import org.neo4j.helpers.collection.Iterables;
+import org.neo4j.kernel.impl.util.StringLogger;
 
 /**
  * Cluster configuration. Includes name of cluster, list of nodes, and role mappings
@@ -41,14 +42,16 @@ public class ClusterConfiguration
     public static final String COORDINATOR = "coordinator";
 
     private final String name;
+    private final StringLogger logger;
     private final List<URI> candidateMembers;
     private Map<InstanceId, URI> members;
     private Map<String, InstanceId> roles = new HashMap<String, InstanceId>();
     private int allowedFailures = 1;
 
-    public ClusterConfiguration( String name, String... members )
+    public ClusterConfiguration( String name, StringLogger logger, String... members )
     {
         this.name = name;
+        this.logger = logger;
         this.candidateMembers = new ArrayList<URI>();
         for ( String node : members )
         {
@@ -64,16 +67,23 @@ public class ClusterConfiguration
         this.members = new HashMap<InstanceId, URI>();
     }
 
-    public ClusterConfiguration( String name, Collection<URI> members )
+    public ClusterConfiguration( String name, StringLogger logger, Collection<URI> members )
     {
         this.name = name;
+        this.logger = logger;
         this.candidateMembers = new ArrayList<URI>( members );
         this.members = new HashMap<InstanceId, URI>();
     }
 
     public ClusterConfiguration( ClusterConfiguration copy )
     {
+        this(copy, copy.logger);
+    }
+
+    private ClusterConfiguration( ClusterConfiguration copy, StringLogger logger )
+    {
         this.name = copy.name;
+        this.logger = logger;
         this.candidateMembers = new ArrayList<URI>( copy.candidateMembers );
         this.roles = new HashMap<String, InstanceId>( copy.roles );
         this.members = new HashMap<InstanceId, URI>( copy.members );
@@ -92,6 +102,7 @@ public class ClusterConfiguration
 
     public void left( InstanceId leftInstanceId )
     {
+        logger.info( "Instance " + leftInstanceId + " is leaving the cluster" );
         this.members = new HashMap<InstanceId, URI>( members );
         members.remove( leftInstanceId );
 
@@ -103,6 +114,7 @@ public class ClusterConfiguration
 
             if ( roleEntry.getValue().equals( leftInstanceId ) )
             {
+                logger.info("Removed role " + roleEntry.getValue() + " from leaving instance " + roleEntry.getKey() );
                 entries.remove();
             }
         }
@@ -177,6 +189,7 @@ public class ClusterConfiguration
     {
         roles = new HashMap<String, InstanceId>( roles );
         InstanceId removed = roles.remove( roleName );
+        logger.info( "Removed role " + roleName + " from instance " + removed );
     }
 
     public InstanceId getElected( String roleName )
@@ -203,18 +216,12 @@ public class ClusterConfiguration
         }, roles.entrySet() ) );
     }
 
-    @Override
-    public String toString()
-    {
-        return "Name:" + name + " Nodes:" + members + " Roles:" + roles;
-    }
-
     public URI getUriForId( InstanceId node )
     {
         return members.get( node );
     }
 
-    public InstanceId getServerId( URI fromUri )
+    public InstanceId getIdForUri( URI fromUri )
     {
         for ( Map.Entry<InstanceId, URI> serverIdURIEntry : members.entrySet() )
         {
@@ -224,5 +231,65 @@ public class ClusterConfiguration
             }
         }
         return null;
+    }
+
+    public ClusterConfiguration snapshot(StringLogger logger)
+    {
+        return new ClusterConfiguration(this, logger);
+    }
+
+    @Override
+    public String toString()
+    {
+        return "Name:" + name + " Nodes:" + members + " Roles:" + roles;
+    }
+
+    @Override
+    public boolean equals( Object o )
+    {
+        if ( this == o )
+        {
+            return true;
+        }
+        if ( o == null || getClass() != o.getClass() )
+        {
+            return false;
+        }
+
+        ClusterConfiguration that = (ClusterConfiguration) o;
+
+        if ( allowedFailures != that.allowedFailures )
+        {
+            return false;
+        }
+        if ( !candidateMembers.equals( that.candidateMembers ) )
+        {
+            return false;
+        }
+        if ( !members.equals( that.members ) )
+        {
+            return false;
+        }
+        if ( !name.equals( that.name ) )
+        {
+            return false;
+        }
+        if ( !roles.equals( that.roles ) )
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    @Override
+    public int hashCode()
+    {
+        int result = name.hashCode();
+        result = 31 * result + candidateMembers.hashCode();
+        result = 31 * result + members.hashCode();
+        result = 31 * result + roles.hashCode();
+        result = 31 * result + allowedFailures;
+        return result;
     }
 }

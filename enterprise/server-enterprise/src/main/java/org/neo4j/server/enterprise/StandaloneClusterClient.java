@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -27,6 +27,7 @@ import org.jboss.netty.channel.ChannelException;
 
 import org.neo4j.cluster.ClusterSettings;
 import org.neo4j.cluster.client.ClusterClient;
+import org.neo4j.cluster.protocol.atomicbroadcast.ObjectStreamFactory;
 import org.neo4j.cluster.protocol.election.NotElectableElectionCredentialsProvider;
 import org.neo4j.graphdb.config.Setting;
 import org.neo4j.helpers.Args;
@@ -101,8 +102,9 @@ public class StandaloneClusterClient
         try
         {
             Logging logging = logging();
+            ObjectStreamFactory objectStreamFactory = new ObjectStreamFactory();
             new StandaloneClusterClient( logging, new ClusterClient( adapt( new Config( config ) ),
-                    logging, new NotElectableElectionCredentialsProvider() ) );
+                    logging, new NotElectableElectionCredentialsProvider(), objectStreamFactory, objectStreamFactory )  );
         }
         catch ( LifecycleException e )
         {

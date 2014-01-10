@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -101,7 +101,7 @@ public class TestCommunityDatabase
     @Test
     public void shouldLogOnSuccessfulStartup() throws Throwable
     {
-        InMemoryAppender appender = new InMemoryAppender( Database.log );
+        InMemoryAppender appender = new InMemoryAppender( CommunityDatabase.log );
 
         theDatabase.start();
 
@@ -111,7 +111,7 @@ public class TestCommunityDatabase
     @Test
     public void shouldShutdownCleanly() throws Throwable
     {
-        InMemoryAppender appender = new InMemoryAppender( Database.log );
+        InMemoryAppender appender = new InMemoryAppender( CommunityDatabase.log );
 
         theDatabase.start();
         theDatabase.stop();

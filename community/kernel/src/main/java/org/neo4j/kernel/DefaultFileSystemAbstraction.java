@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -18,8 +18,6 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 package org.neo4j.kernel;
-
-import static java.lang.String.format;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -41,9 +39,14 @@ import org.neo4j.kernel.impl.nioneo.store.FileLock;
 import org.neo4j.kernel.impl.nioneo.store.FileSystemAbstraction;
 import org.neo4j.kernel.impl.util.FileUtils;
 
+import static java.lang.String.format;
+
 /**
  * Default file system abstraction that creates files using the underlying file system.
+ *
+ * @deprecated This will be moved to internal packages in the next major release.
  */
+@Deprecated
 public class DefaultFileSystemAbstraction
         implements FileSystemAbstraction
 {

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -30,7 +30,6 @@ import org.junit.Test;
 import org.neo4j.graphdb.GraphDatabaseService;
 import org.neo4j.graphdb.factory.GraphDatabaseFactory;
 import org.neo4j.graphdb.factory.GraphDatabaseSettings;
-import org.neo4j.graphdb.index.IndexProvider;
 import org.neo4j.helpers.Service;
 import org.neo4j.helpers.Settings;
 import org.neo4j.helpers.collection.Iterables;
@@ -46,9 +45,11 @@ import org.neo4j.kernel.impl.transaction.xaframework.TransactionInterceptorProvi
 import org.neo4j.kernel.impl.util.DumpLogicalLog.CommandFactory;
 
 import static java.nio.ByteBuffer.allocate;
+
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
 import static recovery.CreateTransactionsAndDie.produceNonCleanDbWhichWillRecover2PCsOnStartup;
+
 import static org.neo4j.helpers.collection.MapUtil.stringMap;
 import static org.neo4j.kernel.impl.transaction.xaframework.LogIoUtils.readEntry;
 import static org.neo4j.kernel.impl.transaction.xaframework.LogIoUtils.readLogHeader;
@@ -62,17 +63,11 @@ public class TestRecoveryVerification
         TestGraphDatabase( String dir, RecoveryVerifier recoveryVerifier )
         {
             super( dir, stringMap(), Iterables.<Class<?>, Class<?>>iterable( (Class<?>) GraphDatabaseSettings.class )
-                    , Service.load( IndexProvider.class ), Iterables.<KernelExtensionFactory<?>,
+                    , Iterables.<KernelExtensionFactory<?>,
                     KernelExtensionFactory>cast( Service.load( KernelExtensionFactory.class ) ),
                     Service.load( CacheProvider.class ), Service.load( TransactionInterceptorProvider.class ) );
             this.verifier = recoveryVerifier;
             run();
-        }
-
-        @Override
-        protected boolean isHighlyAvailable()
-        {
-            return false;
         }
 
         @Override
@@ -145,11 +140,7 @@ public class TestRecoveryVerification
                 if ( entry instanceof TwoPhaseCommit )
                 {
                     long txId = ((TwoPhaseCommit) entry).getTxId();
-                    if ( lastOne == -1 )
-                    {
-                        lastOne = txId;
-                    }
-                    else
+                    if ( lastOne != -1 )
                     {
                         assertEquals( lastOne + 1, txId );
                     }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -24,9 +24,6 @@ import javax.transaction.SystemException;
 import javax.transaction.TransactionManager;
 
 import org.neo4j.graphdb.NotInTransactionException;
-import org.neo4j.kernel.api.KernelAPI;
-import org.neo4j.kernel.api.KernelTransaction;
-import org.neo4j.kernel.api.operations.StatementState;
 import org.neo4j.kernel.impl.core.TransactionState;
 import org.neo4j.kernel.impl.transaction.xaframework.ForceMode;
 import org.neo4j.kernel.lifecycle.Lifecycle;
@@ -43,12 +40,23 @@ import org.neo4j.kernel.lifecycle.Lifecycle;
  */
 public abstract class AbstractTransactionManager implements TransactionManager, Lifecycle
 {
+    public abstract void doRecovery() throws Throwable;
+
+    /**
+     * Returns the {@link TransactionState} associated with the current transaction.
+     * If no transaction is active for the current thread {@link TransactionState#NO_STATE}
+     * should be returned.
+     *
+     * @return state associated with the current transaction for this thread.
+     */
+    public abstract TransactionState getTransactionState();
+
+    public abstract int getEventIdentifier();
+
     public void begin( ForceMode forceMode ) throws NotSupportedException, SystemException
     {
         begin();
     }
-
-    public abstract void doRecovery() throws Throwable;
 
     /**
      * @return which {@link ForceMode} the transaction tied to the calling
@@ -58,17 +66,6 @@ public abstract class AbstractTransactionManager implements TransactionManager, 
     {
         return ForceMode.forced;
     }
-    
-    /**
-     * Returns the {@link TransactionState} associated with the current transaction.
-     * If no transaction is active for the current thread {@link TransactionState#NO_STATE}
-     * should be returned.
-     * 
-     * @return state associated with the current transaction for this thread.
-     */
-    public abstract TransactionState getTransactionState();
-
-    public abstract int getEventIdentifier();
 
     /**
      * @return the error that happened during recovery, if recovery has taken place, null otherwise.
@@ -76,39 +73,6 @@ public abstract class AbstractTransactionManager implements TransactionManager, 
     public Throwable getRecoveryError()
     {
         return null;
-    }
-
-    /**
-     * Temporarily here during transition to Kernel API.
-     *
-     * @return an open statement context for the current transaction. If none exists, it should create one. It
-     *         can do this using the kernel api that is provided at startup through the (ick) setKernel method.
-     */
-    @Deprecated
-    public StatementState newStatement()
-    {
-        throw new UnsupportedOperationException( "The current transaction manager implementation does not support the " +
-                "new StatementContext interface. This is an intermediary problem during transition to a new internal API." );
-    }
-    
-    /**
-     * Temporarily here during transition to Kernel API
-     * @param kernel
-     */
-    @Deprecated
-    public abstract void setKernel( KernelAPI kernel );
-    
-    /**
-     * Temporarily here during transition to Kernel API.
-     *
-     * @return an open transaction context for the current transaction. If none exists, it should create one. It
-     *         can do this using the kernel api that is provided at startup through the (ick) setKernel method.
-     */
-    @Deprecated
-    public KernelTransaction getKernelTransaction()
-    {
-        throw new UnsupportedOperationException( "The current transaction manager implementation does not support the " +
-                "new TransactionContext interface. This is an intermediary problem during transition to a new internal API." );
     }
 
     public void assertInTransaction()

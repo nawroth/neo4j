@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -27,6 +27,7 @@ import org.apache.lucene.store.Directory;
 import org.apache.lucene.util.Version;
 
 import org.neo4j.index.impl.lucene.LuceneDataSource;
+import org.neo4j.index.impl.lucene.MultipleBackupDeletionPolicy;
 
 public class IndexWriterFactories
 {
@@ -39,6 +40,8 @@ public class IndexWriterFactories
             {
                 IndexWriterConfig writerConfig = new IndexWriterConfig( Version.LUCENE_36, LuceneDataSource.KEYWORD_ANALYZER );
                 writerConfig.setMaxBufferedDocs( 100000 ); // TODO figure out depending on environment?
+                writerConfig.setIndexDeletionPolicy( new MultipleBackupDeletionPolicy() );
+                writerConfig.setTermIndexInterval( 14 );
                 return new IndexWriter( directory, writerConfig );
             }
         };

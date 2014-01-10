@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -34,6 +34,7 @@ import org.neo4j.graphdb.event.PropertyEntry;
 import org.neo4j.graphdb.event.TransactionData;
 import org.neo4j.graphdb.event.TransactionEventHandler;
 import org.neo4j.kernel.impl.AbstractNeo4jTestCase;
+import org.neo4j.kernel.impl.core.NodeManager;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -172,7 +173,11 @@ public class TestTransactionEvents extends AbstractNeo4jTestCase
             expectedData.assignedProperty( node3, "name", "Node 3", null );
 
             newTransaction();
-            assertTrue( handler.hasBeenCalled() );
+            assertTrue( "Should have been invoked", handler.hasBeenCalled() );
+            if ( handler.failure() != null )
+            {
+                throw new RuntimeException( handler.failure() );
+            }
         }
         finally
         {
@@ -186,6 +191,9 @@ public class TestTransactionEvents extends AbstractNeo4jTestCase
         newTransaction();
         try
         {
+            Node newNode = getGraphDb().createNode();
+            expectedData.expectedCreatedNodes.add( newNode );
+            
             Node tempNode = getGraphDb().createNode();
             Relationship tempRel = tempNode.createRelationshipTo( node1,
                     RelTypes.TXEVENT );
@@ -227,6 +235,11 @@ public class TestTransactionEvents extends AbstractNeo4jTestCase
             tempNode.delete();
 
             newTransaction();
+            assertTrue( "Should have been invoked", handler.hasBeenCalled() );
+            if ( handler.failure() != null )
+            {
+                throw new RuntimeException( handler.failure() );
+            }
         }
         finally
         {
@@ -239,16 +252,11 @@ public class TestTransactionEvents extends AbstractNeo4jTestCase
     {
         commit();
 
-        List<TransactionEventHandler<Object>> handlers =
-                new ArrayList<TransactionEventHandler<Object>>();
-        handlers.add( new FailingEventHandler<Object>(
-                new DummyTransactionEventHandler<Object>( null ), false ) );
-        handlers.add( new FailingEventHandler<Object>(
-                new DummyTransactionEventHandler<Object>( null ), false ) );
-        handlers.add( new FailingEventHandler<Object>(
-                new DummyTransactionEventHandler<Object>( null ), true ) );
-        handlers.add( new FailingEventHandler<Object>(
-                new DummyTransactionEventHandler<Object>( null ), false ) );
+        List<TransactionEventHandler<Object>> handlers = new ArrayList<>();
+        handlers.add( new FailingEventHandler<>( new DummyTransactionEventHandler<>( null ), false ) );
+        handlers.add( new FailingEventHandler<>( new DummyTransactionEventHandler<>( null ), false ) );
+        handlers.add( new FailingEventHandler<>( new DummyTransactionEventHandler<>( null ), true ) );
+        handlers.add( new FailingEventHandler<>( new DummyTransactionEventHandler<>( null ), false ) );
         for ( TransactionEventHandler<Object> handler : handlers )
         {
             getGraphDb().registerTransactionEventHandler( handler );
@@ -345,11 +353,11 @@ public class TestTransactionEvents extends AbstractNeo4jTestCase
         MyTxEventHandler handler = new MyTxEventHandler(); 
         getGraphDb().registerTransactionEventHandler( handler );
         newTransaction();
-        getGraphDbAPI().getNodeManager().clearCache();
+        getGraphDbAPI().getDependencyResolver().resolveDependency( NodeManager.class ).clearCache();
         rel.delete();
         node1.delete();
         node2.delete();
-        getGraphDbAPI().getNodeManager().clearCache();
+        getGraphDbAPI().getDependencyResolver().resolveDependency( NodeManager.class ).clearCache();
         commit();
         assertEquals( "stringvalue", handler.nodeProps.get( "test1" ) );
         assertEquals( "stringvalue", handler.relProps.get( "test1" ) );
@@ -364,8 +372,8 @@ public class TestTransactionEvents extends AbstractNeo4jTestCase
         
     private static class MyTxEventHandler implements TransactionEventHandler<Object>
     {
-        Map<String,Object> nodeProps = new HashMap<String,Object>();
-        Map<String,Object> relProps = new HashMap<String, Object>();
+        Map<String,Object> nodeProps = new HashMap<>();
+        Map<String,Object> relProps = new HashMap<>();
         
         @Override
 		public void afterCommit( TransactionData data, Object state )
@@ -391,7 +399,6 @@ public class TestTransactionEvents extends AbstractNeo4jTestCase
 		public Object beforeCommit( TransactionData data )
                 throws Exception
         {
-            // TODO Auto-generated method stub
             return null;
         }
     }
@@ -479,7 +486,9 @@ public class TestTransactionEvents extends AbstractNeo4jTestCase
 		public Object beforeCommit(TransactionData data) throws Exception 
 		{
 			if(beforeCommitException != null)
-				throw beforeCommitException;
+            {
+                throw beforeCommitException;
+            }
 			return null;
 		}
 
@@ -487,14 +496,18 @@ public class TestTransactionEvents extends AbstractNeo4jTestCase
 		public void afterCommit(TransactionData data, Object state) 
 		{
 			if(afterCommitException != null)
-				throw new RuntimeException(afterCommitException);
+            {
+                throw new RuntimeException(afterCommitException);
+            }
 		}
 
 		@Override
 		public void afterRollback(TransactionData data, Object state) 
 		{
 			if(afterRollbackException != null)
-				throw new RuntimeException(afterRollbackException);
+            {
+                throw new RuntimeException(afterRollbackException);
+            }
 		}
     	
     }

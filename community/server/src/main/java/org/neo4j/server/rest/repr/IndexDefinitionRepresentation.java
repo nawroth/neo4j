@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,10 +19,10 @@
  */
 package org.neo4j.server.rest.repr;
 
-import static org.neo4j.helpers.collection.Iterables.map;
-
 import org.neo4j.graphdb.schema.IndexDefinition;
 import org.neo4j.helpers.Function;
+
+import static org.neo4j.helpers.collection.Iterables.map;
 
 public class IndexDefinitionRepresentation extends MappingRepresentation
 {
@@ -47,7 +47,7 @@ public class IndexDefinitionRepresentation extends MappingRepresentation
             }
         };
         Iterable<Representation> propertyKeyRepresentations = map( converter, indexDefinition.getPropertyKeys() );
-        serializer.putList( "property-keys", new ListRepresentation( RepresentationType.STRING,
+        serializer.putList( "property_keys", new ListRepresentation( RepresentationType.STRING,
                 propertyKeyRepresentations ) );
     }
 }

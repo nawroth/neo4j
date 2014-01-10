@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -24,8 +24,6 @@ import java.util.Random;
 
 import org.junit.BeforeClass;
 import org.junit.Test;
-
-import org.neo4j.kernel.api.exceptions.PropertyNotFoundException;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -211,9 +209,9 @@ public class PropertyConversionTest
         random = new Random();
     }
 
-    private static void assertConverts( Object value ) throws PropertyNotFoundException
+    private static void assertConverts( Object value )
     {
-        Property property = PropertyConversion.convertProperty( 17, value );
+        DefinedProperty property = PropertyConversion.convertProperty( 17, value );
         assertDeepEquals( value, property.value() );
         assertTrue( "valueEquals:" + value.getClass(), property.valueEquals( value ) );
         assertTrue( "two conversions are equal", property.equals( PropertyConversion.convertProperty( 17, value ) ) );

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,12 +21,14 @@ package org.neo4j.kernel.impl.api.index;
 
 import org.neo4j.helpers.Exceptions;
 import org.neo4j.kernel.api.exceptions.index.IndexPopulationFailedKernelException;
+import org.neo4j.kernel.api.index.IndexDescriptor;
 
 public abstract class IndexPopulationFailure
 {
     public abstract String asString();
     
-    public abstract IndexPopulationFailedKernelException asIndexPopulationFailure( IndexDescriptor descriptor );
+    public abstract IndexPopulationFailedKernelException asIndexPopulationFailure(
+            IndexDescriptor descriptor, String indexUserDescriptor );
 
     public static IndexPopulationFailure failure( final Throwable failure )
     {
@@ -39,9 +41,10 @@ public abstract class IndexPopulationFailure
             }
 
             @Override
-            public IndexPopulationFailedKernelException asIndexPopulationFailure( IndexDescriptor descriptor )
+            public IndexPopulationFailedKernelException asIndexPopulationFailure(
+                    IndexDescriptor descriptor, String indexUserDescription )
             {
-                return new IndexPopulationFailedKernelException( descriptor, failure );
+                return new IndexPopulationFailedKernelException( descriptor, indexUserDescription, failure );
             }
         };
     }
@@ -57,9 +60,10 @@ public abstract class IndexPopulationFailure
             }
 
             @Override
-            public IndexPopulationFailedKernelException asIndexPopulationFailure( IndexDescriptor descriptor )
+            public IndexPopulationFailedKernelException asIndexPopulationFailure(
+                    IndexDescriptor descriptor, String indexUserDescription )
             {
-                return new IndexPopulationFailedKernelException( descriptor, failure );
+                return new IndexPopulationFailedKernelException( descriptor, indexUserDescription, failure );
             }
         };
     }

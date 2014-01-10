@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -67,15 +67,6 @@ public class TestNeo4jConstrains extends AbstractNeo4jTestCase
         assertFalse( GlobalGraphOperations.at( getGraphDb() ).getAllNodes().iterator().hasNext() );
         // TODO: this should be valid, fails right now!
         // assertEquals( 0, numNodesPost );
-        try
-        {
-            getGraphDb().getReferenceNode();
-            fail();
-        }
-        catch ( NotFoundException nfe )
-        {
-            // should be thrown
-        }
         tx.success();
         tx.finish();
     }

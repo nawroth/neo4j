@@ -15,11 +15,11 @@ include::hello-world.asciidoc[]
 
 :leveloffset: 2
 
-include::index-users.asciidoc[]
+include::new-index-users.asciidoc[]
 
 :leveloffset: 2
 
-include::new-index-users.asciidoc[]
+include::index-users.asciidoc[]
 
 :leveloffset: 2
 
@@ -57,6 +57,4 @@ include::management.asciidoc[]
 
 include::unique-nodes.asciidoc[]
 
-:leveloffset: 2
 
-include::osgi.asciidoc[]

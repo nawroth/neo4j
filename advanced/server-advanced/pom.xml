@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <!--
-  Copyright (c) 2002-2013 "Neo Technology,"
+  Copyright (c) 2002-2014 "Neo Technology,"
   Network Engine for Objects in Lund AB [http://neotechnology.com]
 
   This file is part of Neo4j.
@@ -31,6 +31,7 @@
   <groupId>org.neo4j.app</groupId>
   <artifactId>neo4j-server-advanced</artifactId>
   <version>2.0-SNAPSHOT</version>
+
   <name>Neo4j Advanced Server</name>
   <description>Standalone Neo4j server application.</description>
   <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
@@ -38,6 +39,7 @@
   <properties>
     <bundle.namespace>org.neo4j.server.advanced</bundle.namespace>
     <short-name>server-advanced</short-name>
+    <version-package>server.advanced</version-package>
     <neo4j-server.mainClass>org.neo4j.server.Bootstrapper</neo4j-server.mainClass>
     <neo-server.home>target/generated-resources/appassembler/jsw</neo-server.home>
     <neo-server.confdir>target/test-classes/etc/neo-server</neo-server.confdir>
@@ -414,29 +416,7 @@
 
   </profiles>
 
-
-  <reporting>
-    <plugins>
-      <plugin>
-        <artifactId>maven-javadoc-plugin</artifactId>
-      </plugin>
-    </plugins>
-  </reporting>
-
   <repositories>
-    <repository>
-      <id>java.net</id>
-      <url>http://download.java.net/maven/2/</url>
-    </repository>
-    <repository>
-      <id>tinkerpop-repository</id>
-      <name>TinkerPop Maven2 Repository</name>
-      <url>http://tinkerpop.com/maven2</url>
-      <snapshots>
-        <enabled>true</enabled>
-        <updatePolicy>daily</updatePolicy>
-      </snapshots>
-    </repository>
     <repository>
       <id>selenium-repository</id>
       <url>http://selenium.googlecode.com/svn/repository</url>
@@ -468,7 +448,7 @@
   <distributionManagement>
     <site>
       <id>neo4j-site</id>
-      <url>scpexe://static.neo4j.org/var/www/components.neo4j.org/${project.artifactId}/${project.version}</url>
+      <url>scpexe://docs.neo4j.org/data/www/doc/components.neo4j.org/${project.artifactId}/${project.version}</url>
     </site>
   </distributionManagement>
 

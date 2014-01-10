@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,13 +19,17 @@
  */
 package org.neo4j.doc.cypherdoc;
 
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.PrintStream;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 
 import org.neo4j.cypher.javacompat.ExecutionEngine;
 import org.neo4j.graphdb.GraphDatabaseService;
-import org.neo4j.graphdb.Transaction;
 import org.neo4j.test.TestGraphDatabaseFactory;
+import org.neo4j.test.impl.EphemeralFileSystemAbstraction;
 
 /**
  * Parse AsciiDoc-like content for use in Cypher documentation.
@@ -45,7 +49,7 @@ import org.neo4j.test.TestGraphDatabaseFactory;
  *     The query result will be searched for each of the strings (one string per line).
  * </pre>
  */
-public class CypherDoc
+public final class CypherDoc
 {
     static final String EOL = System.getProperty( "line.separator" );
 
@@ -55,35 +59,31 @@ public class CypherDoc
 
     /**
      * Parse a string as CypherDoc-enhanced AsciiDoc.
-     * 
-     * @param input
-     * @return
      */
     public static String parse( String input )
     {
         List<Block> blocks = parseBlocks( input );
 
-        StringBuilder output = new StringBuilder( 4096 );
-        GraphDatabaseService database = new TestGraphDatabaseFactory().newImpermanentDatabase();
-        Transaction transaction = database.beginTx();
+        EphemeralFileSystemAbstraction fs = new EphemeralFileSystemAbstraction();
+        GraphDatabaseService database = new TestGraphDatabaseFactory().setFileSystem( fs ).newImpermanentDatabase();
+        TestFailureException failure = null;
         try
         {
             ExecutionEngine engine = new ExecutionEngine( database );
-
-            removeReferenceNode( database );
-
-            for ( Block block : blocks )
-            {
-                output.append( block.process( engine, database ) )
-                        .append( EOL )
-                        .append( EOL );
-            }
-
-            return output.toString();
+            return executeBlocks( blocks, new State( engine, database ) );
+        }
+        catch ( TestFailureException exception )
+        {
+            dumpStoreFiles( fs, failure = exception, "before-shutdown" );
+            throw exception;
         }
         finally
         {
-            transaction.finish();
+            database.shutdown();
+            if ( failure != null )
+            {
+                dumpStoreFiles( fs, failure, "after-shutdown" );
+            }
         }
     }
 
@@ -95,41 +95,74 @@ public class CypherDoc
             throw new IllegalArgumentException( "To little content, only "
                                                 + lines.length + " lines." );
         }
-        List<Block> blocks = new ArrayList<Block>();
-        List<String> currentBlock = new ArrayList<String>();
+        List<Block> blocks = new ArrayList<>();
+        List<String> currentBlock = new ArrayList<>();
         for ( String line : lines )
         {
-            if ( line.trim()
-                    .isEmpty() && currentBlock.size() > 0 )
+            if ( line.trim().isEmpty() )
             {
-                blocks.add( Block.getBlock( currentBlock ) );
-                currentBlock = new ArrayList<String>();
+                if ( !currentBlock.isEmpty() )
+                {
+                    blocks.add( Block.getBlock( currentBlock ) );
+                    currentBlock = new ArrayList<>();
+                }
+            }
+            else if ( line.startsWith( "//" ) && !line.startsWith( "////" ) && currentBlock.isEmpty() )
+            {
+                blocks.add( Block.getBlock( Collections.singletonList( line ) ) );
             }
             else
             {
                 currentBlock.add( line );
             }
         }
-        if ( currentBlock.size() > 0 )
+        if ( !currentBlock.isEmpty() )
         {
             blocks.add( Block.getBlock( currentBlock ) );
         }
         return blocks;
     }
 
-    @SuppressWarnings( "deprecation" )
-    static void removeReferenceNode( GraphDatabaseService database )
+    private static String executeBlocks( List<Block> blocks, State state )
     {
-        Transaction tx = database.beginTx();
+        StringBuilder output = new StringBuilder( 4096 );
+        boolean hasConsole = false;
+        for ( Block block : blocks )
+        {
+            if ( block.type == BlockType.CONSOLE )
+            {
+                hasConsole = true;
+            }
+            output.append( block.process( state ) )
+                  .append( EOL )
+                  .append( EOL );
+        }
+        if ( !hasConsole )
+        {
+            output.append( BlockType.CONSOLE.process( null, state ) );
+        }
+
+        return output.toString();
+    }
+
+    static String indent( String string )
+    {
+        return string.replace( "\r\n", "\n" ).replace( "\n", EOL + "\t" );
+    }
+
+    private static void dumpStoreFiles( EphemeralFileSystemAbstraction fs, TestFailureException exception, String when )
+    {
+        ByteArrayOutputStream snapshot = new ByteArrayOutputStream();
         try
         {
-            database.getReferenceNode()
-                    .delete();
-            tx.success();
+            fs.dumpZip( snapshot );
+            exception.addSnapshot( when + ".zip", snapshot.toByteArray() );
         }
-        finally
+        catch ( IOException e )
         {
-            tx.finish();
+            snapshot.reset();
+            e.printStackTrace( new PrintStream( snapshot ) );
+            exception.addSnapshot( "dump-exception-" + when + ".txt", snapshot.toByteArray() );
         }
     }
 }

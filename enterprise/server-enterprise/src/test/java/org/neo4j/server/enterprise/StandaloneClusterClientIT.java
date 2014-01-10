@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -37,6 +37,7 @@ import org.junit.rules.TestRule;
 
 import org.neo4j.cluster.InstanceId;
 import org.neo4j.cluster.client.ClusterClient;
+import org.neo4j.cluster.protocol.atomicbroadcast.ObjectStreamFactory;
 import org.neo4j.cluster.protocol.cluster.ClusterConfiguration;
 import org.neo4j.cluster.protocol.cluster.ClusterListener;
 import org.neo4j.cluster.protocol.cluster.ClusterListener.Adapter;
@@ -180,8 +181,9 @@ public class StandaloneClusterClientIT
             config.put( server_id.name(), "" + i );
             config.put( initial_hosts.name(), ":5001" );
             Logging logging = new DevNullLoggingService();
+            ObjectStreamFactory objectStreamFactory = new ObjectStreamFactory();
             final ClusterClient client = new ClusterClient( adapt( new Config( config ) ), logging,
-                    new ServerIdElectionCredentialsProvider() );
+                    new ServerIdElectionCredentialsProvider(), objectStreamFactory, objectStreamFactory );
             final CountDownLatch latch = new CountDownLatch( 1 );
             client.addClusterListener( new ClusterListener.Adapter()
             {

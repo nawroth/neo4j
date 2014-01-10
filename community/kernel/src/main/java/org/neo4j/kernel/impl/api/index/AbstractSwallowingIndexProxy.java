@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,11 +19,11 @@
  */
 package org.neo4j.kernel.impl.api.index;
 
-import java.io.IOException;
 import java.util.concurrent.Future;
 
+import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.IndexReader;
-import org.neo4j.kernel.api.index.NodePropertyUpdate;
+import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.api.index.SchemaIndexProvider;
 
 import static org.neo4j.helpers.FutureAdapter.VOID;
@@ -56,17 +56,11 @@ public abstract class AbstractSwallowingIndexProxy implements IndexProxy
     }
 
     @Override
-    public void update( Iterable<NodePropertyUpdate> updates )
+    public IndexUpdater newUpdater( IndexUpdateMode mode )
     {
-        // intentionally swallow updates, we're failed and nothing but re-population or dropIndex will solve this
+        return SwallowingIndexUpdater.INSTANCE;
     }
-    
-    @Override
-    public void recover( Iterable<NodePropertyUpdate> updates ) throws IOException
-    {
-        // intentionally swallow updates, we're failed and nothing but re-population or dropIndex will solve this
-    }
-    
+
     @Override
     public void force()
     {

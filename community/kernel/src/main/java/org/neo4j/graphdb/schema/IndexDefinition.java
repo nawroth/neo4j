@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -25,8 +25,8 @@ import org.neo4j.graphdb.index.IndexManager;
 /**
  * Definition for an index
  * 
- * NOTE: This is part of the new index API introduced in Neo4j 2.0.
- * The former index API lives in {@link IndexManager}.
+ * NOTE: This is part of the index API introduced in Neo4j 2.0.
+ * The legacy index API lives in {@link IndexManager}.
  */
 public interface IndexDefinition
 {

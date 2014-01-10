@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -31,27 +31,25 @@ import org.junit.Before;
 import org.junit.Test;
 import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
+
 import org.neo4j.helpers.collection.IteratorUtil;
-import org.neo4j.kernel.api.StatementOperations;
-import org.neo4j.kernel.api.exceptions.EntityNotFoundException;
 import org.neo4j.kernel.api.exceptions.schema.SchemaRuleNotFoundException;
+import org.neo4j.kernel.api.index.IndexDescriptor;
 import org.neo4j.kernel.api.index.InternalIndexState;
-import org.neo4j.kernel.api.operations.AuxiliaryStoreOperations;
-import org.neo4j.kernel.api.operations.StatementState;
+import org.neo4j.kernel.impl.api.KernelStatement;
+import org.neo4j.kernel.impl.api.LegacyPropertyTrackers;
 import org.neo4j.kernel.impl.api.StateHandlingStatementOperations;
 import org.neo4j.kernel.impl.api.StatementOperationsTestHelper;
-import org.neo4j.kernel.impl.api.constraints.ConstraintIndexCreator;
-import org.neo4j.kernel.impl.api.index.IndexDescriptor;
+import org.neo4j.kernel.impl.api.store.StoreReadLayer;
 import org.neo4j.kernel.impl.persistence.PersistenceManager;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.fail;
-import static org.mockito.Matchers.anyLong;
-import static org.mockito.Matchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
+
 import static org.neo4j.helpers.Exceptions.launderedException;
 import static org.neo4j.helpers.collection.Iterables.option;
 import static org.neo4j.helpers.collection.IteratorUtil.asSet;
@@ -197,14 +195,14 @@ public class SchemaTransactionStateTest
 
     // exists
 
-    private final long labelId1 = 10, labelId2 = 12, nodeId = 20;
-    private final long key1 = 45, key2 = 46;
+    private final int labelId1 = 10, labelId2 = 12, key1 = 45, key2 = 46;
+    private final long nodeId = 20;
 
-    private StatementOperations store;
+    private StoreReadLayer store;
     private OldTxStateBridge oldTxState;
     private TxState txState;
     private StateHandlingStatementOperations txContext;
-    private StatementState state;
+    private KernelStatement state;
 
     @Before
     public void before() throws Exception
@@ -214,23 +212,14 @@ public class SchemaTransactionStateTest
         txState = new TxStateImpl( oldTxState, mock( PersistenceManager.class ),
                 mock( TxState.IdGeneration.class ) );
         state = StatementOperationsTestHelper.mockedState( txState );
-        
-        store = mock( StatementOperations.class );
+
+        store = mock( StoreReadLayer.class );
         when( store.indexesGetForLabel( state, labelId1 ) ).then( asAnswer( Collections.<IndexDescriptor>emptyList() ) );
         when( store.indexesGetForLabel( state, labelId2 ) ).then( asAnswer( Collections.<IndexDescriptor>emptyList() ) );
         when( store.indexesGetAll( state ) ).then( asAnswer( Collections.<IndexDescriptor>emptyList() ) );
-        when( store.indexCreate( eq( state ), anyLong(), anyLong() ) ).thenAnswer( new Answer<IndexDescriptor>()
-        {
-            @Override
-            public IndexDescriptor answer( InvocationOnMock invocation ) throws Throwable
-            {
-                return new IndexDescriptor((Long) invocation.getArguments()[0],
-                        (Long) invocation.getArguments()[1] );
-            }
-        } );
 
-        txContext = new StateHandlingStatementOperations( store, store, mock( AuxiliaryStoreOperations.class ),
-                mock( ConstraintIndexCreator.class ) );
+        txContext = new StateHandlingStatementOperations( store, mock( LegacyPropertyTrackers.class ),
+                mock( ConstraintIndexCreator.class ));
     }
 
     private static <T> Answer<Iterator<T>> asAnswer( final Iterable<T> values )
@@ -248,55 +237,53 @@ public class SchemaTransactionStateTest
     private static class Labels
     {
         private final long nodeId;
-        private final Long[] labelIds;
+        private final Integer[] labelIds;
 
-        Labels( long nodeId, Long... labelIds )
+        Labels( long nodeId, Integer... labelIds )
         {
             this.nodeId = nodeId;
             this.labelIds = labelIds;
         }
     }
 
-    private static Labels labels( long nodeId, Long... labelIds )
+    private static Labels labels( long nodeId, Integer... labelIds )
     {
         return new Labels( nodeId, labelIds );
     }
 
-    private void commitLabels( Labels... labels ) throws EntityNotFoundException
+    private void commitLabels( Labels... labels ) throws Exception
     {
-        Map<Long, Collection<Long>> allLabels = new HashMap<Long, Collection<Long>>();
+        Map<Integer, Collection<Long>> allLabels = new HashMap<>();
         for ( Labels nodeLabels : labels )
         {
-            when( store.nodeGetLabels( state, nodeLabels.nodeId ) ).then( asAnswer( Arrays.<Long>asList( nodeLabels
-                    .labelIds ) ) );
-            for ( long label : nodeLabels.labelIds )
+            when( store.nodeGetLabels( state, nodeLabels.nodeId ) ).then(
+                    asAnswer( Arrays.<Integer>asList( nodeLabels.labelIds ) ) );
+            for ( int label : nodeLabels.labelIds )
             {
                 when( store.nodeHasLabel( state, nodeLabels.nodeId, label ) ).thenReturn( true );
-                when( store.nodeRemoveLabel( state, nodeLabels.nodeId, label ) ).thenReturn( true );
-                when( store.nodeAddLabel( state, nodeLabels.nodeId, label ) ).thenReturn( false );
 
                 Collection<Long> nodes = allLabels.get( label );
                 if ( nodes == null )
                 {
-                    nodes = new ArrayList<Long>();
+                    nodes = new ArrayList<>();
                     allLabels.put( label, nodes );
                 }
                 nodes.add( nodeLabels.nodeId );
             }
         }
 
-        for ( Map.Entry<Long, Collection<Long>> entry : allLabels.entrySet() )
+        for ( Map.Entry<Integer, Collection<Long>> entry : allLabels.entrySet() )
         {
             when( store.nodesGetForLabel( state, entry.getKey() ) ).then( asAnswer( entry.getValue() ) );
         }
     }
 
-    private void commitNoLabels() throws EntityNotFoundException
+    private void commitNoLabels() throws Exception
     {
-        commitLabels( new Long[0] );
+        commitLabels( new Integer[0] );
     }
 
-    private void commitLabels( Long... labels ) throws EntityNotFoundException
+    private void commitLabels( Integer... labels ) throws Exception
     {
         commitLabels( labels( nodeId, labels ) );
     }

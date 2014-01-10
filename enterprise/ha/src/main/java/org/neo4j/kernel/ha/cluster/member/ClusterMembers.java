@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -96,7 +96,7 @@ public class ClusterMembers
     {
         ClusterMember clusterMember = members.get( server );
         if ( clusterMember == null )
-            throw new IllegalStateException( "Member " + server + " not found in " + members );
+            throw new IllegalStateException( "Member " + server + " not found in " + new HashMap(members) );
         return clusterMember;
     }
     
@@ -181,7 +181,9 @@ public class ClusterMembers
         public void failed( InstanceId server )
         {
             if (members.containsKey( server ))
+            {
                 members.put( server, getMember( server ).failed() );
+            }
         }
 
         @Override

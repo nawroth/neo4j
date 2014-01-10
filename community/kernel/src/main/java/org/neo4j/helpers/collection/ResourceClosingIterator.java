@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,18 +19,17 @@
  */
 package org.neo4j.helpers.collection;
 
-import java.io.Closeable;
-import java.io.IOException;
 import java.util.Iterator;
 import java.util.NoSuchElementException;
 
+import org.neo4j.graphdb.Resource;
 import org.neo4j.graphdb.ResourceIterator;
 
 public abstract class ResourceClosingIterator<T, V> implements ResourceIterator<V>
 {
-    public static <T> ResourceIterator<T> newResourceIterator( Closeable closeable, Iterator<T> iterator )
+    public static <T> ResourceIterator<T> newResourceIterator( Resource resource, Iterator<T> iterator )
     {
-        return new ResourceClosingIterator<T, T>( closeable, iterator  ) {
+        return new ResourceClosingIterator<T, T>( resource, iterator  ) {
 
             @Override
             public T map( T elem )
@@ -40,27 +39,20 @@ public abstract class ResourceClosingIterator<T, V> implements ResourceIterator<
         };
     }
 
-    private Closeable closeable;
+    private Resource resource;
     private final Iterator<T> iterator;
 
-    ResourceClosingIterator( Closeable closeable, Iterator<T> iterator )
+    ResourceClosingIterator( Resource resource, Iterator<T> iterator )
     {
-        this.closeable = closeable;
+        this.resource = resource;
         this.iterator = iterator;
     }
 
     @Override
     public void close()
     {
-        try
-        {
-            closeable.close();
-            closeable = IteratorUtil.EMPTY_CLOSEABLE;
-        }
-        catch ( IOException e )
-        {
-            throw new RuntimeException( e );
-        }
+        resource.close();
+        resource = Resource.EMPTY;
     }
 
     @Override

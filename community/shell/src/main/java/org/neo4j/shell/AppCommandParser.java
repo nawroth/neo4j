@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -24,6 +24,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
+import org.neo4j.shell.apps.NoopApp;
+
 import static org.neo4j.shell.TextUtil.tokenizeStringWithQuotes;
 
 /**
@@ -44,8 +46,8 @@ public class AppCommandParser
     private final String line;
     private String appName;
     private App app;
-    private final Map<String, String> options = new HashMap<String, String>();
-    private final List<String> arguments = new ArrayList<String>();
+    private final Map<String, String> options = new HashMap<>();
+    private final List<String> arguments = new ArrayList<>();
 
     /**
      * @param server the server used to find apps.
@@ -89,6 +91,7 @@ public class AppCommandParser
     {
         if ( line == null || line.trim().length() == 0 )
         {
+            app = new NoopApp();
             return;
         }
 
@@ -127,12 +130,12 @@ public class AppCommandParser
         for ( int i = 0; i < parsed.length; i++ )
         {
             String string = parsed[i];
-            if ( isMultiCharOption( string ) )
+            if ( app.takesOptions() && isMultiCharOption( string ) )
             {
                 String name = string.substring( 2 );
                 i = fetchArguments( parsed, i, name );
             }
-            else if ( this.isSingleCharOption( string ) )
+            else if ( app.takesOptions() && isSingleCharOption( string ) )
             {
                 String options = string.substring( 1 );
                 for ( int o = 0; o < options.length(); o++ )

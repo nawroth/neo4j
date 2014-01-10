@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -22,8 +22,8 @@ package org.neo4j.kernel.api.impl.index;
 import java.io.File;
 import java.io.IOException;
 
+import org.apache.lucene.index.CorruptIndexException;
 import org.apache.lucene.store.Directory;
-
 import org.neo4j.kernel.api.index.IndexAccessor;
 import org.neo4j.kernel.api.index.IndexConfiguration;
 import org.neo4j.kernel.api.index.IndexPopulator;
@@ -58,8 +58,11 @@ public class LuceneSchemaIndexProvider extends SchemaIndexProvider
     {
         if ( config.isUnique() )
         {
-            return new UniqueLuceneIndexPopulator(
-                    UniqueLuceneIndexPopulator.DEFAULT_BATCH_SIZE, documentStructure, standard(), writerStatus,
+//            return new UniqueLuceneIndexPopulator(
+//                    UniqueLuceneIndexPopulator.DEFAULT_BATCH_SIZE, documentStructure, standard(), writerStatus,
+//                    directoryFactory, folderLayout.getFolder( indexId ), failureStorage, indexId );
+            return new DeferredConstraintVerificationUniqueLuceneIndexPopulator(
+                    documentStructure, standard(), writerStatus,
                     directoryFactory, folderLayout.getFolder( indexId ), failureStorage, indexId );
         }
         else
@@ -87,7 +90,7 @@ public class LuceneSchemaIndexProvider extends SchemaIndexProvider
 
     @Override
     public void shutdown() throws Throwable
-    {
+    {   // Nothing to shut down
     }
 
     @Override
@@ -101,16 +104,15 @@ public class LuceneSchemaIndexProvider extends SchemaIndexProvider
                 return InternalIndexState.FAILED;
             }
             
-            Directory directory = directoryFactory.open( folderLayout.getFolder( indexId ) );
-            try
+            try ( Directory directory = directoryFactory.open( folderLayout.getFolder( indexId ) ) )
             {
                 boolean status = writerStatus.isOnline( directory );
                 return status ? InternalIndexState.ONLINE : InternalIndexState.POPULATING;
             }
-            finally
-            {
-                directory.close();
-            }
+        }
+        catch(CorruptIndexException e)
+        {
+            return InternalIndexState.FAILED;
         }
         catch ( IOException e )
         {

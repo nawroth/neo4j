@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,21 +21,16 @@ package org.neo4j.desktop.config;
 
 import java.io.File;
 import java.io.IOException;
+import java.net.URISyntaxException;
 
 /**
- * General environment concerns, for example {@link Environment#openBrowser(String) opening a browser} or
- * {@link Environment#getAppFile() getting the executable file} used to launch this JVM
- * (where the classes might live inside it).
+ * Interacts with the environment in a way that abstracts away the specifics of the current operating system.
  */
 public interface Environment
 {
-    boolean isRunByApp();
+    void openBrowser( String url ) throws IOException, URISyntaxException;
 
-    File getAppFile();
-    
-    File getExtensionsDirectory();
-    
-    void openBrowser( String link );
-    
     void editFile( File file ) throws IOException;
+
+    void openDirectory( File directory ) throws IOException;
 }

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -21,54 +21,45 @@ package org.neo4j.server.rest.transactional;
 
 import org.junit.Test;
 
-import org.neo4j.cypher.CouldNotCreateConstraintException;
 import org.neo4j.cypher.CypherException;
 import org.neo4j.cypher.InternalException;
 import org.neo4j.cypher.ParameterNotFoundException;
 import org.neo4j.cypher.SyntaxException;
-import org.neo4j.server.rest.transactional.error.StatusCode;
+import org.neo4j.server.rest.transactional.error.Status;
 
 import static org.junit.Assert.assertEquals;
 
-import static org.neo4j.server.rest.transactional.error.StatusCode.COULD_NOT_CREATE_CONSTRAINT;
-import static org.neo4j.server.rest.transactional.error.StatusCode.INTERNAL_STATEMENT_EXECUTION_ERROR;
-import static org.neo4j.server.rest.transactional.error.StatusCode.STATEMENT_EXECUTION_ERROR;
-import static org.neo4j.server.rest.transactional.error.StatusCode.STATEMENT_MISSING_PARAMETER;
-import static org.neo4j.server.rest.transactional.error.StatusCode.STATEMENT_SYNTAX_ERROR;
+import static org.neo4j.server.rest.transactional.error.Status.Statement.ExecutionFailure;
+import static org.neo4j.server.rest.transactional.error.Status.Statement.InvalidSyntax;
+import static org.neo4j.server.rest.transactional.error.Status.Statement.ParameterMissing;
 
 public class CypherExceptionMappingTest
 {
     @Test
     public void shouldMap_SyntaxException_to_STATEMENT_SYNTAX_ERROR() throws Exception
     {
-        assertEquals( STATEMENT_SYNTAX_ERROR, map( new SyntaxException( "message" ) ));
+        assertEquals( InvalidSyntax, map( new SyntaxException( "message" ) ));
     }
 
     @Test
     public void shouldMap_ParameterNotFoundException_to_STATEMENT_MISSING_PARAMETER() throws Exception
     {
-        assertEquals( STATEMENT_MISSING_PARAMETER, map( new ParameterNotFoundException( "message" ) ));
-    }
-
-    @Test
-    public void shouldMap_CouldNotCreateConstraintException_to_COULD_NOT_CREATE_CONSTRAINT() throws Exception
-    {
-        assertEquals( COULD_NOT_CREATE_CONSTRAINT, map( new CouldNotCreateConstraintException( "message", new Exception() ) ));
+        assertEquals( ParameterMissing, map( new ParameterNotFoundException( "message" ) ));
     }
 
     @Test
     public void shouldMap_InternalException_to_INTERNAL_STATEMENT_EXECUTION_ERROR() throws Exception
     {
-        assertEquals( INTERNAL_STATEMENT_EXECUTION_ERROR, map( new InternalException( "message", null ) ));
+        assertEquals( ExecutionFailure, map( new InternalException( "message", null ) ));
     }
 
     @Test
     public void shouldMap_CypherException_to_STATEMENT_EXECUTION_ERROR() throws Exception
     {
-        assertEquals( STATEMENT_EXECUTION_ERROR, map( new CypherException( "message", null ) {} ));
+        assertEquals( ExecutionFailure, map( new CypherException( "message", null ) {} ));
     }
 
-    private StatusCode map( CypherException cypherException )
+    private Status map( CypherException cypherException )
     {
         return new CypherExceptionMapping().apply( cypherException );
     }

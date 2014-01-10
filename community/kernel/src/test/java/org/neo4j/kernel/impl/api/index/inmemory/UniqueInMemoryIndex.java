@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -20,88 +20,73 @@
 package org.neo4j.kernel.impl.api.index.inmemory;
 
 import java.io.IOException;
-import java.util.HashMap;
-import java.util.Map;
 
-import org.neo4j.kernel.api.index.IndexAccessor;
 import org.neo4j.kernel.api.index.IndexEntryConflictException;
-import org.neo4j.kernel.api.index.IndexPopulator;
-import org.neo4j.kernel.api.index.IndexReader;
+import org.neo4j.kernel.api.index.IndexUpdater;
 import org.neo4j.kernel.api.index.NodePropertyUpdate;
 import org.neo4j.kernel.api.index.PreexistingIndexEntryConflictException;
-import org.neo4j.kernel.impl.api.index.PropertyUpdateUniquenessValidator;
+import org.neo4j.kernel.impl.util.PrimitiveLongIterator;
+import org.neo4j.kernel.impl.api.index.IndexUpdateMode;
+import org.neo4j.kernel.impl.api.index.UniquePropertyIndexUpdater;
 
-class UniqueInMemoryIndex extends InMemoryIndex implements PropertyUpdateUniquenessValidator.Lookup
+class UniqueInMemoryIndex extends InMemoryIndex implements UniquePropertyIndexUpdater.Lookup
 {
-    private final Map<Object, Long> indexData = new HashMap<Object, Long>();
-
     @Override
-    IndexPopulator getPopulator()
+    protected void add( long nodeId, Object propertyValue, boolean applyIdempotently )
+            throws IndexEntryConflictException, IOException
     {
-        return new InMemoryIndex.Populator()
+        PrimitiveLongIterator nodes = lookup( propertyValue );
+        if ( nodes.hasNext() )
         {
-            @Override
-            public void add( long nodeId, Object propertyValue ) throws IndexEntryConflictException, IOException
-            {
-                Long previous = indexData.get( propertyValue );
-                if ( previous != null )
-                {
-                    throw new PreexistingIndexEntryConflictException( propertyValue, previous, nodeId );
-                }
-
-                super.add( nodeId, propertyValue );
-            }
-        };
-    }
-
-    @Override
-    IndexAccessor getOnlineAccessor()
-    {
-        return new InMemoryIndex.OnlineAccessor()
-        {
-            @Override
-            public IndexReader newReader()
-            {
-                return new UniqueInMemoryIndexReader( indexData );
-            }
-
-            @Override
-            public void updateAndCommit( Iterable<NodePropertyUpdate> updates ) throws IOException,
-                    IndexEntryConflictException
-            {
-                PropertyUpdateUniquenessValidator.validateUniqueness( updates, UniqueInMemoryIndex.this );
-
-                super.updateAndCommit( updates );
-            }
-        };
-    }
-
-    @Override
-    protected void add( long nodeId, Object propertyValue ) throws IndexEntryConflictException
-    {
-        indexData.put( propertyValue, nodeId );
-    }
-
-    @Override
-    protected void remove( long nodeId, Object propertyValue )
-    {
-        long curNodeId = indexData.get( propertyValue );
-        if ( nodeId == curNodeId )
-        {
-            indexData.remove( propertyValue );
+            throw new PreexistingIndexEntryConflictException( propertyValue, nodes.next(), nodeId );
         }
+        super.add( nodeId, propertyValue, applyIdempotently );
     }
 
-
     @Override
-    protected void clear()
+    protected IndexUpdater newUpdater( final IndexUpdateMode mode, final boolean populating )
     {
-        indexData.clear();
+        return new UniquePropertyIndexUpdater( UniqueInMemoryIndex.this )
+        {
+            @Override
+            protected void flushUpdates( Iterable<NodePropertyUpdate> updates )
+                    throws IOException, IndexEntryConflictException
+            {
+                for ( NodePropertyUpdate update : updates )
+                {
+                    switch ( update.getUpdateMode() )
+                    {
+                        case CHANGED:
+                        case REMOVED:
+                            UniqueInMemoryIndex.this.remove( update.getNodeId(), update.getValueBefore() );
+                    }
+                }
+                for ( NodePropertyUpdate update : updates )
+                {
+                    switch ( update.getUpdateMode() )
+                    {
+                        case ADDED:
+                        case CHANGED:
+                            add( update.getNodeId(), update.getValueAfter(), IndexUpdateMode.ONLINE == mode );
+                    }
+                }
+            }
+
+            @Override
+            public void remove( Iterable<Long> nodeIds )
+            {
+                for ( long nodeId : nodeIds )
+                {
+                    UniqueInMemoryIndex.this.remove( nodeId );
+                }
+            }
+        };
     }
 
     @Override
     public Long currentlyIndexedNode( Object value ) throws IOException
     {
-        return indexData.get( value );
+        PrimitiveLongIterator nodes = lookup( value );
+        return nodes.hasNext() ? nodes.next() : null;
     }
 }

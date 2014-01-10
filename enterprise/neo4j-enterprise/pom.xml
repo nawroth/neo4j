@@ -11,6 +11,7 @@
   <groupId>org.neo4j</groupId>
   <artifactId>neo4j-enterprise</artifactId>
   <version>2.0-SNAPSHOT</version>
+
   <name>Neo4j Enterprise</name>
   <packaging>jar</packaging>
   <url>http://components.neo4j.org/${project.artifactId}/${project.version}</url>
@@ -20,6 +21,7 @@
 
   <properties>
     <short-name>neo4j-enterprise</short-name>
+    <version-package>enterprise.impl</version-package>
     <bundle.namespace>org.neo4j</bundle.namespace>
     <docs.url>http://docs.neo4j.org/chunked/${project.version}/deployment-installation.html#editions</docs.url>
     <docs-plugin.skip>true</docs-plugin.skip>
@@ -144,7 +146,7 @@
                   <filtering>false</filtering>
                 </resource>
                 <resource>
-                  <directory>${project.build.directory}/../../../community/cypher/src/main/java/</directory>
+                  <directory>${project.build.directory}/../../../community/cypher/cypher/src/main/java/</directory>
                   <filtering>false</filtering>
                 </resource>
              </resources>
@@ -169,12 +171,12 @@
               <windowtitle>${project.name} ${project.version} API</windowtitle>
               <show>public</show>
               <excludePackageNames>
-                *.impl.*:*.internal.*:org.neo4j.ext.udc:org.neo4j.kernel.ha:org.neo4j.kernel.ha.*:org.neo4j.com:org.neo4j.com.*:org.apache.lucene.index:org.neo4j.cluster.*:org.neo4j.helpers.progress:org.neo4j.kernel.configuration:org.neo4j.kernel.guard:org.neo4j.kernel.info:org.neo4j.kernel.logging
+                *.impl.*:*.internal.*:org.neo4j.ext.udc:org.neo4j.kernel:org.neo4j.kernel.ha:org.neo4j.kernel.ha.*:org.neo4j.com:org.neo4j.com.*:org.apache.lucene.index:org.neo4j.cluster.*:org.neo4j.helpers.progress:org.neo4j.kernel.configuration:org.neo4j.kernel.guard:org.neo4j.kernel.info:org.neo4j.kernel.logging
               </excludePackageNames>
               <groups>
                 <group>
                   <title>Graph database</title>
-                  <packages>org.neo4j.kernel:org.neo4j.graphdb:org.neo4j.kernel.*:org.neo4j.graphdb.*
+                  <packages>org.neo4j.graphdb:org.neo4j.graphdb.*
                   </packages>
                 </group>
                 <group>
@@ -239,7 +241,7 @@
   <distributionManagement>
     <site>
       <id>neo4j-site</id>
-      <url>scpexe://static.neo4j.org/var/www/components.neo4j.org/${project.artifactId}/${project.version}</url>
+      <url>scpexe://docs.neo4j.org/data/www/doc/components.neo4j.org/${project.artifactId}/${project.version}</url>
     </site>
   </distributionManagement>
 

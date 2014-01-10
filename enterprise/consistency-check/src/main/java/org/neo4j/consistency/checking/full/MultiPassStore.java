@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -118,17 +118,39 @@ public enum MultiPassStore
             this.report = report;
         }
 
-        StoreProcessor[] createAll( MultiPassStore... stores )
+        ConsistencyReporter[] reporters( TaskExecutionOrder order, MultiPassStore... stores )
         {
-            List<StoreProcessor> result = new ArrayList<StoreProcessor>();
+            if ( order == TaskExecutionOrder.MULTI_PASS )
+            {
+                return reporters( stores );
+            }
+            else
+            {
+                return new ConsistencyReporter[]{new ConsistencyReporter( recordAccess, report )};
+            }
+        }
+
+        ConsistencyReporter[] reporters( MultiPassStore... stores )
+        {
+            List<ConsistencyReporter> result = new ArrayList<>();
             for ( MultiPassStore store : stores )
             {
                 List<DiffRecordAccess> filters = store.multiPassFilters( totalMappedMemory, storeAccess,
                         recordAccess, stores );
                 for ( DiffRecordAccess filter : filters )
                 {
-                    result.add( new StoreProcessor( decorator, new ConsistencyReporter( filter, report ) ) );
+                    result.add( new ConsistencyReporter( filter, report ) );
                 }
+            }
+            return result.toArray( new ConsistencyReporter[result.size()] );
+        }
+
+        StoreProcessor[] processors( MultiPassStore... stores )
+        {
+            List<StoreProcessor> result = new ArrayList<>();
+            for ( ConsistencyReporter reporter : reporters( stores ) )
+            {
+                result.add( new StoreProcessor( decorator, reporter ) );
             }
             return result.toArray( new StoreProcessor[result.size()] );
         }

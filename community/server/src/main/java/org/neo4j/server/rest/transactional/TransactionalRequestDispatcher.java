@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -95,7 +95,7 @@ public class TransactionalRequestDispatcher implements RequestDispatcher
                 @Override
                 public void onRepresentationFinal()
                 {
-                    transaction.finish();
+                    transaction.close();
                 }
             } );
         }
@@ -123,7 +123,7 @@ public class TransactionalRequestDispatcher implements RequestDispatcher
                 {
                     if ( transaction != null )
                     {
-                        transaction.finish();
+                        transaction.close();
                     }
                 }
             } );

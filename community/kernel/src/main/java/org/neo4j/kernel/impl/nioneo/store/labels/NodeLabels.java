@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -28,6 +28,8 @@ public interface NodeLabels
 {
     long[] get( NodeStore nodeStore );
 
+    long[] getIfLoaded();
+
     Collection<DynamicRecord> put( long[] labelIds, NodeStore nodeStore );
 
     Collection<DynamicRecord> add( long labelId, NodeStore nodeStore );
@@ -35,4 +37,6 @@ public interface NodeLabels
     Collection<DynamicRecord> remove( long labelId, NodeStore nodeStore );
 
     void ensureHeavy( NodeStore nodeStore );
+
+    boolean isInlined();
 }

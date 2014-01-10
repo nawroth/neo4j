@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -26,6 +26,7 @@ import org.junit.Test;
 import org.neo4j.graphdb.Node;
 import org.neo4j.graphdb.Transaction;
 import org.neo4j.kernel.GraphDatabaseAPI;
+import org.neo4j.kernel.impl.core.NodeManager;
 import org.neo4j.server.rrd.sampler.RelationshipCountSampleable;
 import org.neo4j.test.TestGraphDatabaseFactory;
 
@@ -66,7 +67,7 @@ public class RelationshipCountSampleableTest
     public void setUp() throws Exception
     {
         db = (GraphDatabaseAPI)new TestGraphDatabaseFactory().newImpermanentDatabase();
-        sampleable = new RelationshipCountSampleable( db.getNodeManager() );
+        sampleable = new RelationshipCountSampleable( db.getDependencyResolver().resolveDependency( NodeManager.class ) );
     }
 
     @After

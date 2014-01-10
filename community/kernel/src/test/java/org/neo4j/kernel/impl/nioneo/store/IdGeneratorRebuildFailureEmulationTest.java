@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -195,14 +195,12 @@ public class IdGeneratorRebuildFailureEmulationTest
                     assertEquals( "all relationships should have 3 properties.", 3, readProperties( rel ) );
                     relcount++;
                 }
-                if ( !graphdb.getReferenceNode().equals( node ) )
-                {
-                    assertEquals( "all created nodes should have 3 properties.", 3, propcount );
-                    assertEquals( "all created nodes should have 2 relationships.", 2, relcount );
-                }
+                assertEquals( "all created nodes should have 3 properties.", 3, propcount );
+                assertEquals( "all created nodes should have 2 relationships.", 2, relcount );
+
                 nodecount++;
             }
-            assertEquals( "The database should have 3 nodes.", 3, nodecount );
+            assertEquals( "The database should have 2 nodes.", 2, nodecount );
         }
         finally
         {

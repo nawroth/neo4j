@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -20,8 +20,8 @@
 package org.neo4j.server;
 
 import org.junit.Test;
-import org.neo4j.server.helpers.ServerBuilder;
-import org.neo4j.server.preflight.PreflightFailedException;
+
+import org.neo4j.server.helpers.CommunityServerBuilder;
 import org.neo4j.test.server.ExclusiveServerTestBase;
 
 public class PreflightTasksDocIT extends ExclusiveServerTestBase
@@ -29,10 +29,10 @@ public class PreflightTasksDocIT extends ExclusiveServerTestBase
 
     private NeoServer server;
 
-    @Test( expected = PreflightFailedException.class )
+    @Test( expected = ServerStartupException.class )
     public void shouldExitWhenFailedStartupHealthCheck() throws Throwable
     {
-        server = ServerBuilder.server()
+        server = CommunityServerBuilder.server()
                 .usingDatabaseDir( folder.getRoot().getAbsolutePath() )
                 .withFailingPreflightTasks()
                 .build();

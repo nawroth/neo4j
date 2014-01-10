@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -19,19 +19,18 @@
  */
 package org.neo4j.kernel.ha;
 
-import java.io.File;
-
-import org.junit.Assert;
-import org.junit.Test;
-
-import org.neo4j.kernel.impl.util.StringLogger;
-import org.neo4j.test.AbstractClusterTest;
-
 import static org.neo4j.helpers.collection.IteratorUtil.asIterable;
 import static org.neo4j.kernel.impl.util.StringLogger.DEFAULT_NAME;
 import static org.neo4j.test.ha.ClusterManager.clusterWithAdditionalClients;
 import static org.neo4j.test.ha.ClusterManager.masterAvailable;
 import static org.neo4j.test.ha.ClusterManager.masterSeesMembers;
+
+import java.io.File;
+
+import org.junit.Assert;
+import org.junit.Test;
+import org.neo4j.kernel.impl.util.StringLogger;
+import org.neo4j.test.AbstractClusterTest;
 
 public class HaLoggingIT extends AbstractClusterTest
 {
@@ -52,6 +51,7 @@ public class HaLoggingIT extends AbstractClusterTest
         HighlyAvailableGraphDatabase master = cluster.getMaster();
         cluster.shutdown( master );
         cluster.await( masterAvailable( master ) );
+        cluster.await( masterSeesMembers( 2 ) );
         logger.logMessage( logMessage, true );
 
         // THEN

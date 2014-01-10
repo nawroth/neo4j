@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -40,6 +40,7 @@ import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.junit.Assume.assumeTrue;
+
 import static org.neo4j.helpers.Settings.osIsWindows;
 import static org.neo4j.helpers.collection.MapUtil.stringMap;
 
@@ -107,9 +108,9 @@ public class BatchInserterImplTest
         }
         catch ( StoreLockException e )
         {
-            // Ok
-            e.printStackTrace();
-        } finally
+            // OK
+        }
+        finally
         {
             lock.release();
         }

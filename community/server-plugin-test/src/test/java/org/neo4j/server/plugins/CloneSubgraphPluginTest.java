@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -161,7 +161,7 @@ public class CloneSubgraphPluginTest extends ExclusiveServerTestBase
     public void shouldAdvertiseExtenstionThatPluginCreates() throws JsonParseException, ClientHandlerException,
             UniformInterfaceException
     {
-        int originalCount = nodeCount() - 1; // Don't count the reference node
+        int originalCount = nodeCount();
 
         // Find the start node URI from the server
         JaxRsResponse response = new RestRequest().get(functionalTestHelper.dataUri() + "node/1");
@@ -189,7 +189,7 @@ public class CloneSubgraphPluginTest extends ExclusiveServerTestBase
 
         Assert.assertEquals( response.getEntity(), 200, response.getStatus() );
 
-        int doubleTheNumberOfNodes = ( originalCount * 2 ) + 1;
+        int doubleTheNumberOfNodes = ( originalCount * 2 );
         assertEquals( doubleTheNumberOfNodes, nodeCount() );
     }
 

@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -208,9 +208,10 @@ public class Dbinfo extends NonTransactionProvidingApp
         try
         {
             Attribute attribute = (Attribute) value;
-            if ( attribute.getValue().getClass().isArray() )
+            Object attributeValue = attribute.getValue();
+            if ( attributeValue != null && attributeValue.getClass().isArray() )
             {
-                Object[] arrayValue = (Object[]) attribute.getValue();
+                Object[] arrayValue = (Object[]) attributeValue;
                 JSONArray array = new JSONArray();
                 for ( Object item : (Object[]) arrayValue )
                 {
@@ -227,7 +228,7 @@ public class Dbinfo extends NonTransactionProvidingApp
             }
             else
             {
-                json.put( attribute.getName(), attribute.getValue() );
+                json.put( attribute.getName(), attributeValue );
             }
         }
         catch ( JSONException e )

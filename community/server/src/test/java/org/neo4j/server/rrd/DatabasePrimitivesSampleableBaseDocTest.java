@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -25,6 +25,7 @@ import javax.management.MalformedObjectNameException;
 import org.junit.Test;
 
 import org.neo4j.kernel.GraphDatabaseAPI;
+import org.neo4j.kernel.impl.core.NodeManager;
 import org.neo4j.server.rrd.sampler.DatabasePrimitivesSampleableBase;
 import org.neo4j.server.rrd.sampler.NodeIdsInUseSampleable;
 import org.neo4j.test.TestGraphDatabaseFactory;
@@ -38,9 +39,9 @@ public class DatabasePrimitivesSampleableBaseDocTest
     {
         GraphDatabaseAPI db = (GraphDatabaseAPI)new TestGraphDatabaseFactory().newImpermanentDatabase();
         
-        DatabasePrimitivesSampleableBase sampleable = new NodeIdsInUseSampleable( db.getNodeManager() );
+        DatabasePrimitivesSampleableBase sampleable = new NodeIdsInUseSampleable( nodeManager( db ) );
 
-        assertTrue( "There should be a single node in use.", sampleable.getValue() == 1 );
+        assertTrue( "There should be no nodes in use.", sampleable.getValue() == 0 );
 
         db.shutdown();
     }
@@ -50,10 +51,15 @@ public class DatabasePrimitivesSampleableBaseDocTest
     {
         GraphDatabaseAPI db = (GraphDatabaseAPI)new TestGraphDatabaseFactory().newImpermanentDatabase();
 
-        DatabasePrimitivesSampleableBase sampleable = new NodeIdsInUseSampleable( db.getNodeManager() );
+        DatabasePrimitivesSampleableBase sampleable = new NodeIdsInUseSampleable( nodeManager( db ) );
 
-        assertTrue( "There should be a single node in use.", sampleable.getValue() == 1 );
+        assertTrue( "There should be no nodes in use.", sampleable.getValue() == 0 );
 
         db.shutdown();
+    }
+
+    private NodeManager nodeManager( GraphDatabaseAPI db )
+    {
+        return db.getDependencyResolver().resolveDependency( NodeManager.class );
     }
 }

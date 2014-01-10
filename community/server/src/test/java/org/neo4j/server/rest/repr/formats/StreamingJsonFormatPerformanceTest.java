@@ -1,5 +1,5 @@
 /**
- * Copyright (c) 2002-2013 "Neo Technology,"
+ * Copyright (c) 2002-2014 "Neo Technology,"
  * Network Engine for Objects in Lund AB [http://neotechnology.com]
  *
  * This file is part of Neo4j.
@@ -102,7 +102,7 @@ public class StreamingJsonFormatPerformanceTest {
         final Transaction tx = gdb.beginTx();
         try {
             final DynamicRelationshipType TYPE = DynamicRelationshipType.withName("TYPE");
-            Node last = gdb.getReferenceNode();
+            Node last = gdb.createNode();
             last.setProperty("id", 0);
             for (int i = 1; i < 10000; i++) {
                 final Node node = gdb.createNode();
