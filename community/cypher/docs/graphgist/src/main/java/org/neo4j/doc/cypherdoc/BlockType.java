@@ -25,6 +25,7 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.regex.Pattern;
 
 import org.apache.commons.lang3.StringUtils;
 import org.neo4j.graphdb.Transaction;
@@ -40,22 +41,38 @@ enum BlockType
         @Override
         boolean isA( List<String> block )
         {
-            int size = block.size();
-            return size > 0 && ( ( block.get( 0 )
-                    .startsWith( "=" ) && !block.get( 0 )
-                    .startsWith( "==" ) ) || size > 1 && block.get( 1 )
-                    .startsWith( "=" ) );
+            String content = StringUtils.join( block, '\n' );
+
+            return IS_TITLE.matcher( content )
+                    .find();
         }
 
         @Override
         String process( Block block, State state )
         {
-            String title = block.lines.get( 0 )
-                    .replace( "=", "" )
-                    .trim();
-            String id = "cypherdoc-" + title.toLowerCase().replace( ' ', '-' );
-            return "[[" + id + "]]" + CypherDoc.EOL + "= " + title + " ="
-                   + CypherDoc.EOL;
+            String title = null;
+            String idLine = null;
+            int index = 0;
+            String line = block.lines.get( index );
+            if ( line.startsWith( "[[" ) )
+            {
+                idLine = line;
+                index++;
+            }
+            line = block.lines.get( index );
+            if ( line.startsWith( "=" ) )
+            {
+                title = line.replace( "=", " " ).trim();
+            }
+            else
+            {
+                title = line.trim();
+            }
+            if ( idLine == null )
+            {
+                idLine = "[[cypherdoc-" + title.toLowerCase().replace( ' ', '-' ) + "]]";
+            }
+            return idLine + CypherDoc.EOL + "= " + title + " =" + CypherDoc.EOL;
         }
     },
     HIDE
@@ -312,6 +329,7 @@ enum BlockType
     };
 
     private static final String CODE_BLOCK = "----";
+    private static final Pattern IS_TITLE = Pattern.compile( "(\\[\\[.*]]\\n|)((=[^=].*)|([^=].*\\n=====.*))" );
 
     abstract boolean isA( List<String> block );
 

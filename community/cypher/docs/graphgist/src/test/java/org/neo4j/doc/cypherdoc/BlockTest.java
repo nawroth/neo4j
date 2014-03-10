@@ -25,7 +25,6 @@ import java.util.Arrays;
 import java.util.List;
 
 import org.junit.After;
-import org.junit.Assume;
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
@@ -97,6 +96,27 @@ public class BlockTest
         String output = block.process( state );
         assertThat( output, containsString( "[[cypherdoc-title-here]]" ) );
         assertThat( output, containsString( "= Title here =" ) );
+    }
+
+
+    @Test
+    public void should_leave_existing_id_untouched()
+    {
+        // given
+        Block twoLineTitleBlock = Block.getBlock( Arrays.asList( "[[my-id]]", "Title here", "==========" ) );
+        Block oneLineTitleBlock = Block.getBlock( Arrays.asList( "[[my-id]]", "= Title here =" ) );
+
+        // when
+        String twoLineOutput = twoLineTitleBlock.process( state );
+        String oneLineOutput = oneLineTitleBlock.process( state );
+
+        // then
+        assertThat( twoLineTitleBlock.type, sameInstance( BlockType.TITLE ) );
+        assertThat( twoLineOutput, startsWith( "[[my-id]]" ) );
+        assertThat( twoLineOutput, containsString( "= Title here =" ) );
+        assertThat( oneLineTitleBlock.type, sameInstance( BlockType.TITLE ) );
+        assertThat( oneLineOutput, startsWith( "[[my-id]]" ) );
+        assertThat( oneLineOutput, containsString( "= Title here =" ) );
     }
 
     @Test
